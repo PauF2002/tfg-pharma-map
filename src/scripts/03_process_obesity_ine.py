@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
 import unicodedata
+import re
 
 BASE = Path(__file__).resolve().parents[2]
 INP = BASE / "data" / "raw" / "ine_obesity_ccaa.csv"
@@ -12,45 +13,64 @@ def norm_txt(x: str) -> str:
     x = "".join(ch for ch in x if not unicodedata.combining(ch))
     return " ".join(x.split())
 
-df = pd.read_csv(INP, sep=";", engine="python")
+# 1) Leer TSV del INE (tabulador)
+df = pd.read_csv(
+    INP,
+    sep="\t",
+    engine="python",
+    encoding="utf-8-sig",
+    quotechar='"'
+)
 
-# Detecta columna CCAA
-ccaa_col = next((c for c in df.columns if "comun" in c.lower() and "aut" in c.lower()), None)
-# Detecta periodo/año
-period_col = next((c for c in df.columns if "period" in c.lower() or "año" in c.lower() or "anio" in c.lower()), None)
-# Detecta valor
-value_col = next((c for c in df.columns if c.lower() in ["total", "valor"] or "total" in c.lower()), None)
+print("✅ INE columns:", df.columns.tolist(), "| rows:", len(df))
 
-if ccaa_col is None or value_col is None:
-    raise ValueError(f"No detecto columnas INE. Columnas: {df.columns.tolist()}")
+# 2) Renombrar columnas esperadas (por si vienen con mayúsculas/acentos)
+# Esperado: Comunidad autónoma, Masa corporal, Periodo, Total
+col_ccaa = next(c for c in df.columns if "comunidad" in c.lower())
+col_masa = next(c for c in df.columns if "masa" in c.lower())
+col_periodo = next(c for c in df.columns if "period" in c.lower())
+col_total = next(c for c in df.columns if c.lower().strip() == "total" or "total" in c.lower())
 
-out = pd.DataFrame()
-out["CCAA_raw"] = df[ccaa_col].astype(str).str.strip()
-out["ccaa_key"] = out["CCAA_raw"].map(norm_txt)
+# 3) Filtrar SOLO obesidad (IMC >= 30)
+mask_ob = df[col_masa].astype(str).str.contains("Obesidad", case=False, na=False)
+df = df[mask_ob].copy()
 
-if period_col:
-    out["period"] = df[period_col].astype(str).str.strip()
-else:
-    out["period"] = ""
+# 4) Parsear valores
+df["period"] = pd.to_numeric(df[col_periodo], errors="coerce")
+df["obesity_pct"] = (
+    df[col_total].astype(str)
+      .str.replace(",", ".", regex=False)   # coma decimal -> punto
+)
+df["obesity_pct"] = pd.to_numeric(df["obesity_pct"], errors="coerce")
 
-val = df[value_col].astype(str).str.replace(",", ".", regex=False)
-out["obesity_pct"] = pd.to_numeric(val, errors="coerce")
+# 5) Limpiar CCAA (quitar prefijo "01 ", "02 ", etc.)
+df["CCAA_raw"] = df[col_ccaa].astype(str).str.replace(r"^\s*\d+\s*", "", regex=True).str.strip()
 
-# limpia
-out = out.dropna(subset=["obesity_pct"])
-out = out[~out["CCAA_raw"].str.lower().str.contains("total", na=False)]
+# quitar Total Nacional
+df = df[~df["CCAA_raw"].str.lower().str.contains("total nacional", na=False)]
 
-# quedarnos con el último periodo disponible por CCAA
-# (si period es año numérico o tipo "2022", funcionará)
-out["_p"] = pd.to_numeric(out["period"].str.extract(r"(\d{4})")[0], errors="coerce")
-out = out.sort_values(["ccaa_key", "_p"])
-out_latest = out.groupby("ccaa_key", as_index=False).tail(1).drop(columns=["_p"])
+df = df.dropna(subset=["period", "obesity_pct"])
 
-out_latest.rename(columns={"CCAA_raw": "CCAA"}, inplace=True)
+# 6) Quedarnos con el último año por CCAA
+df = df.sort_values(["CCAA_raw", "period"]).groupby("CCAA_raw", as_index=False).tail(1)
 
+# 7) Homogeneizar nombres para casar con tu pipeline (hospital/geojson)
+fix = {
+    norm_txt("Asturias, Principado de"): "Ppdo. de Asturias",
+    norm_txt("Balears, Illes"): "Illes Balears",
+    norm_txt("Murcia, Región de"): "Región de Murcia",
+    norm_txt("Navarra, Comunidad Foral de"): "C. Foral de Navarra",
+    norm_txt("Rioja, La"): "La Rioja",
+    norm_txt("Comunitat Valenciana"): "Comunidad Valenciana",
+    norm_txt("Castilla - La Mancha"): "Castilla-La Mancha",
+}
+df["CCAA"] = df["CCAA_raw"].apply(lambda x: fix.get(norm_txt(x), x))
+
+out = df[["CCAA", "period", "obesity_pct"]].copy()
 OUT.parent.mkdir(parents=True, exist_ok=True)
-out_latest.to_csv(OUT, index=False, encoding="utf-8")
+out.to_csv(OUT, index=False, encoding="utf-8-sig")
+
 
 print(f"✅ Generado: {OUT}")
-print(out_latest.head(10).to_string(index=False))
-print("CCAA:", out_latest["CCAA"].nunique(), "| Periodo único:", out_latest["period"].unique()[:5])
+print(out.head(10).to_string(index=False))
+print("✅ CCAA count:", out["CCAA"].nunique(), "| latest years:", sorted(out["period"].unique())[-5:])
