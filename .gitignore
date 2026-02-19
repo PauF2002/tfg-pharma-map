@@ -3,3 +3,14 @@ __pycache__/
 *.pyc
 outputs/
 data/processed/
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Data (no versionar)
+data/raw/
+data/processed/
+
+# Outputs
+outputs/
