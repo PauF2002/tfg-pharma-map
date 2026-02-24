@@ -113,6 +113,8 @@ def load_hospitals():
 
 def build_choropleth(gj, df_scores, value_col: str, title: str):
     # Inyectar datos en geojson para tooltip
+
+    #RECORRE EL DATFRAME Y DEVUELVE EL INDEX Y LA DILA COMO SERIE, LUEGO CREA UN DICCIONARIO CON LA KEY "ccaa_key" Y EL VALOR DE ESA COLUMNA, Y ASOCIA ESA KEY CON LA FILA COMPLETA (r) EN EL DICCIONARIO
     row_by_key = {r["ccaa_key"]: r for _, r in df_scores.iterrows()}
 
     for feat in gj["features"]:
@@ -195,7 +197,7 @@ if section == "Overview":
     with left:
         st.markdown("### 🗺️ Mapa: Opportunity Score")
         m = build_choropleth(gj, scores, "opportunity_score", "Opportunity score")
-        st_folium(m, width=None, height=560)
+        st_folium(m, width=None, height=580)
 
     with right:
         st.markdown("### 🏆 Ranking Top Oportunidades")
@@ -313,9 +315,18 @@ elif section == "Hospitals Explorer":
 
         for _, r in dfh_map.head(2000).iterrows():
             txt = f"{r['Nombre Centro']}<br>{r['CCAA']} - {r['Provincia']}<br>CAMAS: {r['CAMAS']}"
-            folium.Marker([r["lat"], r["lon"]], popup=txt).add_to(cluster)
-
-        st_folium(m, width=None, height=560)
+            folium.Marker(
+                [r["lat"], r["lon"]],
+                 popup=txt,
+                 icon=folium.DivIcon(
+                     html="""
+                    <div style="font-size: 20px; line-height: 20px; text-align:center;">
+                     🏥
+                    </div>
+                    """
+                 )
+             ).add_to(cluster)
+        st_folium(m, width=None, height=580)
 
 
 # -----------------------------
