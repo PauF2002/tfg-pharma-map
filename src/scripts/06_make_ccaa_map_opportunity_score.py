@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 import unicodedata
-
+#POSIBLE VARIACION DEL MAPA
 BASE = Path(__file__).resolve().parents[2]
 
 HOSP = BASE / "data" / "processed" / "ccaa_hospital_summary.csv"
