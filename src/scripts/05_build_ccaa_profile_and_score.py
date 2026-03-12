@@ -17,6 +17,7 @@ def norm_txt(x: str) -> str:
     x = "".join(ch for ch in x if not unicodedata.combining(ch))
     return " ".join(x.split())
 
+# Normalización min-max a 0-1 usando series de pandas, con manejo de caso constante (todos iguales) para evitar división por cero. Si todos los valores son iguales, se devuelve una serie de ceros.
 def minmax(s: pd.Series) -> pd.Series:
     s = s.astype(float)
     mn, mx = s.min(), s.max()
@@ -29,7 +30,7 @@ h = pd.read_csv(HOSP)
 m = pd.read_csv(MARKET)
 o = pd.read_csv(OBES)
 
-# keys
+#creamos la col key, que es = la ccaa pero aplicandole la funcion norm_txt para normalizar el texto (minúsculas, sin acentos, sin espacios extra)
 h["ccaa_key"] = h["CCAA"].map(norm_txt)
 m["ccaa_key"] = m["CCAA"].map(norm_txt)
 o["ccaa_key"] = o["CCAA"].map(norm_txt)
@@ -73,6 +74,7 @@ profile["beds_n"] = minmax(profile["beds_per_100k"])
 profile["market_n"] = minmax(profile["market_12m_avg_eur_per_capita"])
 profile["obesity_n"] = minmax(profile["obesity_pct"])
 
+# El score se calcula como una media ponderada de las tres dimensiones normalizadas, multiplicada por 100 para escalarlo a 0-100. Se redondea a 2 decimales.
 profile["opportunity_score"] = (100 * (
     0.45*profile["market_n"] +
     0.35*profile["obesity_n"] +

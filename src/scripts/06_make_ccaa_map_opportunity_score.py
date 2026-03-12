@@ -1,132 +1,99 @@
-import re
-import unicodedata
-from pathlib import Path
-
 import pandas as pd
-import folium
-
-
+from pathlib import Path
+import unicodedata
+#POSIBLE VARIACION DEL MAPA
 BASE = Path(__file__).resolve().parents[2]
-GEOJSON = BASE / "data" / "raw" / "ccaa_boundaries.geojson"
-SCORES  = BASE / "data" / "processed" / "ccaa_opportunity_score.csv"
-OUT     = BASE / "outputs" / "maps" / "ccaa_map_opportunity_score.html"
 
+HOSP = BASE / "data" / "processed" / "ccaa_hospital_summary.csv"
+MARKET = BASE / "data" / "processed" / "ccaa_market_monthly.csv"
+OBES = BASE / "data" / "processed" / "ccaa_obesity.csv"
 
-def key(s: str) -> str:
-    """Normaliza texto: minúsculas, sin acentos, sin signos, espacios limpios."""
-    if s is None:
-        return ""
-    s = str(s).strip().lower()
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    s = re.sub(r"[^\w\s-]", " ", s)          # quita puntos/comas/etc (mantiene guiones)
-    s = s.replace("-", " ")                  # guiones como espacio
-    s = " ".join(s.split())
-    return s
+OUT_PROFILE = BASE / "data" / "processed" / "ccaa_profile_latest.csv"
+OUT_SCORE = BASE / "data" / "processed" / "ccaa_opportunity_score.csv"
 
+def norm_txt(x: str) -> str:
+    x = str(x).strip().lower()
+    x = unicodedata.normalize("NFKD", x)
+    x = "".join(ch for ch in x if not unicodedata.combining(ch))
+    return " ".join(x.split())
 
-# Alias: NOMBRE_EN_TUS_CSV -> NOMBRE_EN_GEOJSON(name)
-ALIAS = {
-    "c foral de navarra": "navarra",
-    "ppdo de asturias": "asturias",
-    "principado de asturias": "asturias",
-    "castilla y leon": "castilla leon",
-    "comunidad valenciana": "valencia",
-    "illes balears": "baleares",
-    "islas baleares": "baleares",
-    "region de murcia": "murcia",
-    "pais vasco": "pais vasco",   # ya coincide
-}
+def minmax(s: pd.Series) -> pd.Series:
+    s = s.astype(float)
+    mn, mx = s.min(), s.max()
+    if mx == mn:
+        return s * 0
+    return (s - mn) / (mx - mn)
 
+# --- Load ---
+h = pd.read_csv(HOSP)
+m = pd.read_csv(MARKET)
+o = pd.read_csv(OBES)
 
-def apply_alias(k: str) -> str:
-    return ALIAS.get(k, k)
+# keys
+h["ccaa_key"] = h["CCAA"].map(norm_txt)
+m["ccaa_key"] = m["CCAA"].map(norm_txt)
+o["ccaa_key"] = o["CCAA"].map(norm_txt)
 
+# --- MARKET: media últimos 12 meses per cápita ---
+m = m.dropna(subset=["market_monthly_eur_per_capita"]).copy()
+m = m.sort_values(["ccaa_key", "year_month"])
 
-# 1) Cargar score
-df = pd.read_csv(SCORES)
-df["ccaa_key"] = df["CCAA"].map(key).map(apply_alias)
+market12 = (
+    m.groupby("ccaa_key", as_index=False)
+     .tail(12)
+     .groupby("ccaa_key", as_index=False)
+     .agg(
+         market_12m_avg_eur_per_capita=("market_monthly_eur_per_capita", "mean"),
+         market_12m_sum_eur=("market_monthly_eur", "sum"),
+         market_last_month=("year_month", "max")
+     )
+)
 
-# Dejamos strings “bonitos” para tooltip (evita formatos raros)
-df["opportunity_score_s"] = df["opportunity_score"].round(2).astype(str)
-df["beds_per_100k_s"] = df["beds_per_100k"].round(2).astype(str)
-df["market_pc_s"] = df["market_12m_avg_eur_per_capita"].round(2).astype(str)
-df["obesity_pct_s"] = df["obesity_pct"].round(1).astype(str)
+# --- OBESITY: cogemos el último valor por CCAA (ya viene así normalmente) ---
+# Si hay duplicados, nos quedamos el último por 'period'
+if "period" in o.columns:
+    o["_p"] = pd.to_numeric(o["period"].astype(str).str.extract(r"(\d{4})")[0], errors="coerce")
+    o = o.sort_values(["ccaa_key", "_p"]).groupby("ccaa_key", as_index=False).tail(1).drop(columns=["_p"])
 
-# 2) Cargar geojson y crear key desde properties['name']
-import json
-gj = json.loads(GEOJSON.read_text(encoding="utf-8"))
+ob = o[["ccaa_key", "obesity_pct"]].copy()
 
-for feat in gj["features"]:
-    nm = feat["properties"].get("name", "")
-    feat["properties"]["geo_key"] = key(nm)
+# --- Merge base profile ---
+profile = (
+    h.merge(market12, on="ccaa_key", how="left")
+     .merge(ob, on="ccaa_key", how="left")
+)
 
-geo_keys = {f["properties"]["geo_key"] for f in gj["features"]}
-df_keys = set(df["ccaa_key"].unique())
+# --- Opportunity score (0-100) ---
+# Pesos recomendados: mercado 45% + obesidad 35% + capacidad (camas/100k) 20%
+profile["beds_per_100k"] = pd.to_numeric(profile["beds_per_100k"], errors="coerce").fillna(0)
+profile["market_12m_avg_eur_per_capita"] = pd.to_numeric(profile["market_12m_avg_eur_per_capita"], errors="coerce").fillna(0)
+profile["obesity_pct"] = pd.to_numeric(profile["obesity_pct"], errors="coerce").fillna(0)
 
-missing = sorted(list(df_keys - geo_keys))
-if missing:
-    print("⚠️ CCAA sin match en geojson (no se pintarán):")
-    for m in missing:
-        print("  -", m)
+profile["beds_n"] = minmax(profile["beds_per_100k"])
+profile["market_n"] = minmax(profile["market_12m_avg_eur_per_capita"])
+profile["obesity_n"] = minmax(profile["obesity_pct"])
 
-# 3) Inyectar en el geojson las métricas (para tooltip/popup)
-row_by_key = {r["ccaa_key"]: r for _, r in df.iterrows()}
+profile["opportunity_score"] = (100 * (
+    0.45*profile["market_n"] +
+    0.35*profile["obesity_n"] +
+    0.20*profile["beds_n"]
+)).round(2)
 
-for feat in gj["features"]:
-    k = feat["properties"]["geo_key"]
-    r = row_by_key.get(k)
-    if r is None:
-        # sin datos (p.ej. Ceuta/Melilla) -> dejamos vacío
-        feat["properties"]["CCAA"] = feat["properties"].get("name", "")
-        feat["properties"]["opportunity_score"] = None
-        feat["properties"]["beds_per_100k"] = None
-        feat["properties"]["market_12m_avg_eur_per_capita"] = None
-        feat["properties"]["obesity_pct"] = None
-        feat["properties"]["opportunity_score_s"] = ""
-        feat["properties"]["beds_per_100k_s"] = ""
-        feat["properties"]["market_pc_s"] = ""
-        feat["properties"]["obesity_pct_s"] = ""
-    else:
-        feat["properties"]["CCAA"] = r["CCAA"]
-        feat["properties"]["opportunity_score"] = float(r["opportunity_score"])
-        feat["properties"]["beds_per_100k"] = float(r["beds_per_100k"])
-        feat["properties"]["market_12m_avg_eur_per_capita"] = float(r["market_12m_avg_eur_per_capita"])
-        feat["properties"]["obesity_pct"] = float(r["obesity_pct"])
-        feat["properties"]["opportunity_score_s"] = r["opportunity_score_s"]
-        feat["properties"]["beds_per_100k_s"] = r["beds_per_100k_s"]
-        feat["properties"]["market_pc_s"] = r["market_pc_s"]
-        feat["properties"]["obesity_pct_s"] = r["obesity_pct_s"]
+# ranking
+score = profile[[
+    "CCAA",
+    "hospitals_total", "beds_total", "beds_per_100k",
+    "market_12m_avg_eur_per_capita", "market_12m_sum_eur", "market_last_month",
+    "obesity_pct",
+    "opportunity_score"
+]].sort_values("opportunity_score", ascending=False)
 
+# --- Save ---
+OUT_PROFILE.parent.mkdir(parents=True, exist_ok=True)
+profile.to_csv(OUT_PROFILE, index=False, encoding="utf-8")
+score.to_csv(OUT_SCORE, index=False, encoding="utf-8")
 
-# 4) Mapa
-OUT.parent.mkdir(parents=True, exist_ok=True)
-
-m = folium.Map(location=[40.2, -3.7], zoom_start=6, tiles="cartodbpositron")
-
-folium.Choropleth(
-    geo_data=gj,
-    data=df,
-    columns=["ccaa_key", "opportunity_score"],
-    key_on="feature.properties.geo_key",
-    fill_opacity=0.75,
-    line_opacity=0.35,
-    name="Opportunity Score",
-).add_to(m)
-
-folium.GeoJson(
-    gj,
-    name="Info",
-    tooltip=folium.GeoJsonTooltip(
-        fields=["CCAA", "opportunity_score_s", "beds_per_100k_s", "market_pc_s", "obesity_pct_s"],
-        aliases=["CCAA", "Opportunity score", "Beds / 100k", "Market € / cap (12m avg)", "Obesity % (latest)"],
-        localize=True,
-        sticky=False,
-        labels=True,
-    ),
-).add_to(m)
-
-folium.LayerControl().add_to(m)
-
-m.save(str(OUT))
-print(f"✅ Mapa generado: {OUT}")
+print(f"✅ Generado: {OUT_PROFILE}")
+print(f"✅ Generado: {OUT_SCORE}")
+print("\nTop 10 oportunidades:")
+print(score.head(10).to_string(index=False))

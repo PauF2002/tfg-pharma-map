@@ -11,6 +11,193 @@ import folium
 from folium.plugins import MarkerCluster
 from streamlit_folium import st_folium
 
+def inject_sidebar_styles():
+    st.markdown("""
+    <style>
+    /* ===== Global dark theme ===== */
+    :root {
+        color-scheme: dark;
+    }
+
+    [data-testid="stAppViewContainer"] {
+        background: radial-gradient(1200px 800px at 10% 0%, #111827 0%, #0b1220 45%, #0a0f1a 100%);
+    }
+
+    [data-testid="stHeader"] {
+        background: transparent;
+    }
+
+    .stApp {
+        color: #E5E7EB;
+    }
+
+    /* Texto base en el contenido principal */
+    [data-testid="stMarkdownContainer"],
+    [data-testid="stMetricLabel"],
+    [data-testid="stMetricValue"],
+    [data-testid="stCaptionContainer"],
+    [data-testid="stText"],
+    [data-testid="stDataFrame"] {
+        color: #E5E7EB;
+    }
+
+    /* ===== Sidebar contenedor ===== */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0b1220 0%, #111827 100%);
+        border-right: 1px solid rgba(255,255,255,0.06);
+    }
+
+    /* Texto del sidebar */
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div {
+        color: #E5E7EB;
+    }
+
+    /* ===== RADIO GROUP (navegación) ===== */
+    [data-testid="stSidebar"] div[role="radiogroup"] {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    /* Cada opción = botón uniforme */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label {
+        display: flex !important;
+        align-items: center;
+        width: 100%;
+        min-height: 52px;      /* todos igual */
+        height: 52px;          /* todos igual */
+        box-sizing: border-box;
+        padding: 0 14px;
+        margin: 0;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.03);
+        transition: all 0.18s ease-in-out;
+        cursor: pointer;
+        overflow: hidden;
+    }
+
+    /* Hover reactivo */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+        background: rgba(96,165,250,0.12);
+        border-color: rgba(96,165,250,0.45);
+        transform: translateX(3px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    }
+
+    /* 🔴 Quitar el “botón rojo” (círculo del radio) */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label input[type="radio"] {
+        position: absolute !important;
+        opacity: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        pointer-events: none !important;
+    }
+
+    /* Si Streamlit renderiza un círculo visual extra (según versión), lo ocultamos */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
+        display: none !important;
+    }
+
+    /* Texto de la opción */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label p {
+        margin: 0 !important;
+        width: 100%;
+        color: #E5E7EB !important;
+        font-weight: 600;
+        white-space: nowrap;        /* evita que unos botones crezcan */
+        overflow: hidden;
+        text-overflow: ellipsis;    /* si el texto es largo, ... */
+    }
+
+    /* Seleccionado */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+        background: linear-gradient(90deg, rgba(79,70,229,0.25), rgba(96,165,250,0.18));
+        border-color: rgba(96,165,250,0.55);
+        box-shadow: inset 0 0 0 1px rgba(96,165,250,0.25);
+    }
+                
+
+    /* Contenido interno del sidebar (menos margen y mas arriba) */
+    [data-testid="stSidebarUserContent"] {
+        padding-top: 0.005rem !important;
+        padding-left: 0.45rem !important;
+        padding-right: 0.45rem !important;
+    }
+
+    /* Radio group ocupa todo */
+    [data-testid="stSidebar"] div[role="radiogroup"] {
+    width: 100% !important;
+    }
+
+    /* Cada botón ocupa todo el ancho */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label {
+    width: 100% !important;
+    min-width: 100% !important;
+    }
+
+    /* Separadores del sidebar */
+    [data-testid="stSidebar"] hr {
+        border-color: rgba(255,255,255,0.08);
+    }
+
+    /* Ocultar navegacion multipage por defecto en sidebar */
+    [data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+
+    /* ===== Top nav (page links) ===== */
+    .top-nav {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 6px 0 14px 0;
+    }
+
+    [data-testid="stPageLink"] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.18);
+        background: rgba(255,255,255,0.05);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.22);
+        color: #E5E7EB !important;
+        text-decoration: none !important;
+        font-weight: 600;
+        transition: all 0.18s ease-in-out;
+    }
+
+    [data-testid="stPageLink"]:hover {
+        background: rgba(96,165,250,0.14);
+        border-color: rgba(96,165,250,0.45);
+        transform: translateY(-1px);
+    }
+
+    /* Perfil clickeable */
+    .user-profile-link {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        background: rgba(255,255,255,0.04);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        border: 1px solid rgba(255,255,255,0.08);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none !important;
+    }
+
+  
+    </style>
+    """, unsafe_allow_html=True)
 
 # -----------------------------
 # Paths
@@ -113,6 +300,8 @@ def load_hospitals():
 
 def build_choropleth(gj, df_scores, value_col: str, title: str):
     # Inyectar datos en geojson para tooltip
+
+    #RECORRE EL DATFRAME Y DEVUELVE EL INDEX Y LA DILA COMO SERIE, LUEGO CREA UN DICCIONARIO CON LA KEY "ccaa_key" Y EL VALOR DE ESA COLUMNA, Y ASOCIA ESA KEY CON LA FILA COMPLETA (r) EN EL DICCIONARIO
     row_by_key = {r["ccaa_key"]: r for _, r in df_scores.iterrows()}
 
     for feat in gj["features"]:
@@ -131,6 +320,7 @@ def build_choropleth(gj, df_scores, value_col: str, title: str):
         data=df_scores,
         columns=["ccaa_key", value_col],
         key_on="feature.properties.geo_key",
+        fill_color="RdYlGn",
         fill_opacity=0.75,
         line_opacity=0.35,
         name=title,
@@ -159,6 +349,45 @@ st.set_page_config(
     layout="wide",
 )
 
+inject_sidebar_styles()
+
+# Perfil de usuario en el sidebar (clickeable)
+st.sidebar.markdown("""
+<a href="/User_Profile" target="_self" style="text-decoration: none;">
+    <div class="user-profile-link">
+        <div style='width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;'>
+            👤
+        </div>
+        <div style='flex: 1; min-width: 0;'>
+            <div style='color: #E5E7EB; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>
+                Usuario Demo
+            </div>
+            <div style='color: #9CA3AF; font-size: 12px; margin-top: 2px;'>
+                ✓ Sesión activa
+            </div>
+        </div>
+    </div>
+</a>
+""", unsafe_allow_html=True)
+
+# Logo y nombre de la app en el sidebar
+st.sidebar.markdown("""
+<div style='text-align: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);'>
+    <h2 style='margin: 0; color: #E5E7EB;'>💊 TFG PHARMA</h2>
+</div>
+""", unsafe_allow_html=True)
+
+# Top nav (paginas)
+top_cols = st.columns(4, gap="small")
+with top_cols[0]:
+    st.page_link("app.py", label="app")
+with top_cols[1]:
+    st.page_link("pages/1_Overview_Map.py", label="Overview Map")
+with top_cols[2]:
+    st.page_link("pages/2_CCAA_Table.py", label="CCAA Table")
+with top_cols[3]:
+    st.page_link("pages/4_Inventory.py", label="Inventory")
+
 st.title("📍 Pharma Decision Platform (TFG)")
 st.caption("Plataforma de análisis para apoyar decisiones de marketing en el sector farmacéutico (obesidad/diabetes).")
 
@@ -174,6 +403,7 @@ hosp = load_hospitals()
 section = st.sidebar.radio(
     "Navegación",
     ["Overview", "CCAA Drilldown", "Hospitals Explorer", "About / Methodology"],
+    label_visibility="collapsed"
 )
 
 # -----------------------------
@@ -195,7 +425,7 @@ if section == "Overview":
     with left:
         st.markdown("### 🗺️ Mapa: Opportunity Score")
         m = build_choropleth(gj, scores, "opportunity_score", "Opportunity score")
-        st_folium(m, width=None, height=560)
+        st_folium(m, width=None, height=580)
 
     with right:
         st.markdown("### 🏆 Ranking Top Oportunidades")
@@ -313,9 +543,18 @@ elif section == "Hospitals Explorer":
 
         for _, r in dfh_map.head(2000).iterrows():
             txt = f"{r['Nombre Centro']}<br>{r['CCAA']} - {r['Provincia']}<br>CAMAS: {r['CAMAS']}"
-            folium.Marker([r["lat"], r["lon"]], popup=txt).add_to(cluster)
-
-        st_folium(m, width=None, height=560)
+            folium.Marker(
+                [r["lat"], r["lon"]],
+                 popup=txt,
+                 icon=folium.DivIcon(
+                     html="""
+                    <div style="font-size: 20px; line-height: 20px; text-align:center;">
+                     🏥
+                    </div>
+                    """
+                 )
+             ).add_to(cluster)
+        st_folium(m, width=None, height=580)
 
 
 # -----------------------------
