@@ -36,18 +36,25 @@ ALIASES = {
 if not XLSX_FILE.exists():
     raise FileNotFoundError(f"No encuentro el XLSX: {XLSX_FILE}")
 
+#LEE EL ARCHIVO DE EXCEL COMPLETO (sin procesar)("a lo loco")
 raw = pd.read_excel(XLSX_FILE, sheet_name=SHEET, header=None)
 
 # 1) Detectar columnas mensuales (YYYY - Mes)
 month_meta = []  # (col_idx, year, month_num, ym)
+#leemos el header para detectar las columnas mensuales, que tienen formato "2015 - Enero", etc. El año es importante para luego ordenar y detectar gaps
 for col_idx in range(1, raw.shape[1]):
+    #esta fila tiene el formato "2015 - Enero", etc?
     h = raw.iloc[HEADER_ROW, col_idx]
+    #si es un string que empieza por 4 dígitos (año) seguido de un guion, lo consideramos una columna mensual
     if isinstance(h, str) and re.match(r"^\d{4}\s*-\s*", h):
+    #si parece una columna mensual, extraemos año y mes con la separacion por guion, y normalizamos el mes para convertirlo a número
         year_str, month_str = [p.strip() for p in h.split("-", 1)]
         year = int(year_str)
         mkey = norm_txt(month_str)
+        #si el mes es reconocible, lo añadimos a la metadata de columnas mensuales
         if mkey in MONTHS:
             mnum = MONTHS[mkey]
+            #year-month para ordenar y detectar gaps, numero entero de dos digitos para facilitar ordenación lexicográfica
             ym = f"{year}-{mnum:02d}"
             month_meta.append((col_idx, year, mnum, ym))
 
@@ -60,7 +67,7 @@ labels = raw.iloc[:, LABEL_COL].astype(str)
 idx_total_ccaa = raw.index[labels.str.contains("TOTAL COMUNIDADES", na=False)]
 if len(idx_total_ccaa) == 0:
     raise ValueError("No encuentro la fila 'TOTAL COMUNIDADES AUTÓNOMAS'.")
-
+# El bloque de CCAA empieza justo después de esa fila, y termina antes de la nota aclaratoria que empieza por "Ver Notas" 
 start = int(idx_total_ccaa[0]) + 1
 
 # Fin: antes de la nota aclaratoria "*Ver Notas..."
@@ -68,14 +75,17 @@ idx_end_note = raw.index[labels.str.contains("Ver Notas", na=False)]
 end = int(idx_end_note[0]) - 1 if len(idx_end_note) else raw.shape[0] - 1
 
 ccaa_block = raw.iloc[start:end+1].copy()
+# Filtramos filas sin etiqueta (pueden ser totales parciales o filas vacías)
 ccaa_block = ccaa_block[ccaa_block[LABEL_COL].notna()]
 
 # 3) Cargar summary para coger población y nombres canónicos
 summary = pd.read_csv(SUMMARY_FILE)
 summary["ccaa_key"] = summary["CCAA"].map(norm_txt)
+# Creamos diccionarios para mapear ccaa_key a nombre canónico y población
 key_to_ccaa = dict(zip(summary["ccaa_key"], summary["CCAA"]))
 key_to_pop = dict(zip(summary["ccaa_key"], summary["population"]))
 
+# Procesar bloque CCAA: por cada fila, por cada columna mensual, extraer valor y generar fila de output con CCAA, año, mes, valor mensual (calculado a partir del acumulado) y población (si hay)
 rows = []
 for _, r in ccaa_block.iterrows():
     label = str(r[LABEL_COL]).strip()
@@ -83,6 +93,7 @@ for _, r in ccaa_block.iterrows():
         continue
 
     ccaa_key = norm_txt(label)
+    #si ccaa_key tiene un alias, lo sustituimos para casar con el summary, si no, lo dejamos como está (puede ser que ya case o que no tengamos población para esa CCAA)
     ccaa_key = ALIASES.get(ccaa_key, ccaa_key)
 
     ccaa_name = key_to_ccaa.get(ccaa_key, label.title())
