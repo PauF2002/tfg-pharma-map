@@ -11,4 +11,6 @@ backgroundColor = "#0F172A"
 secondaryBackgroundColor = "#111827"
 textColor = "#E5E7EB"
 primaryColor = "#60A5FA"
-mark
+
+[client]
+showSidebarNavigation = false
