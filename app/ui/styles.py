@@ -763,6 +763,11 @@ section[data-testid="stSidebar"] {
     display: block;
 }
 
+.mainpage-video.object-top {
+    object-position: 50% 22%;
+    transform-origin: 50% 0%;
+}
+
 .mainpage-video-overlay {
     position: absolute;
     left: 10px;

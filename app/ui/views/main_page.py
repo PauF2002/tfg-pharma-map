@@ -14,52 +14,75 @@ from ..config import (
 )
 
 
+@st.cache_data
+def load_video_as_base64(path_or_url: str) -> str:
+    """Load and cache video as base64. Only done once, then served from cache."""
+    if not path_or_url:
+        return ""
+
+    lowered = path_or_url.lower()
+    if lowered.startswith("http://") or lowered.startswith("https://"):
+        return path_or_url
+
+    project_root = Path(__file__).resolve().parents[3]
+    media_path = (project_root / path_or_url).resolve()
+    if not media_path.exists() or not media_path.is_file():
+        return ""
+
+    ext = media_path.suffix.lower()
+    mime_map = {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".ogg": "video/ogg",
+        ".mov": "video/quicktime",
+        ".m4v": "video/mp4",
+    }
+    mime = mime_map.get(ext, "video/mp4")
+    
+    encoded = b64encode(media_path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+@st.cache_data
+def load_image_as_base64(path_or_url: str) -> str:
+    """Load and cache image as base64."""
+    if not path_or_url:
+        return ""
+
+    lowered = path_or_url.lower()
+    if lowered.startswith("http://") or lowered.startswith("https://") or lowered.startswith("data:"):
+        return path_or_url
+
+    project_root = Path(__file__).resolve().parents[3]
+    media_path = (project_root / path_or_url).resolve()
+    if not media_path.exists() or not media_path.is_file():
+        return ""
+
+    ext = media_path.suffix.lower()
+    mime_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+    mime = mime_map.get(ext, "image/png")
+    
+    encoded = b64encode(media_path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
 class MainPageView:
-    @staticmethod
-    def _resolve_media_source(path_or_url: str, is_video: bool) -> str:
-        if not path_or_url:
-            return ""
 
-        lowered = path_or_url.lower()
-        if lowered.startswith("http://") or lowered.startswith("https://") or lowered.startswith("data:"):
-            return path_or_url
-
-        project_root = Path(__file__).resolve().parents[3]
-        media_path = (project_root / path_or_url).resolve()
-        if not media_path.exists() or not media_path.is_file():
-            return ""
-
-        ext = media_path.suffix.lower()
-        if is_video:
-            mime_map = {
-                ".mp4": "video/mp4",
-                ".webm": "video/webm",
-                ".ogg": "video/ogg",
-                ".mov": "video/quicktime",
-                ".m4v": "video/mp4",
-            }
-            mime = mime_map.get(ext, "video/mp4")
-        else:
-            mime_map = {
-                ".jpg": "image/jpeg",
-                ".jpeg": "image/jpeg",
-                ".png": "image/png",
-                ".webp": "image/webp",
-            }
-            mime = mime_map.get(ext, "image/png")
-
-        encoded = b64encode(media_path.read_bytes()).decode("ascii")
-        return f"data:{mime};base64,{encoded}"
 
     def render(self) -> None:
-        video_src = self._resolve_media_source(KPI_INTERACTIVE_MAP_VIDEO_URL, is_video=True)
-        poster_src = self._resolve_media_source(KPI_INTERACTIVE_MAP_VIDEO_POSTER, is_video=False)
-        inventory_video_src = self._resolve_media_source(INVENTORY_VIDEO_URL, is_video=True)
-        inventory_poster_src = self._resolve_media_source(INVENTORY_VIDEO_POSTER, is_video=False)
-        hospital_video_src = self._resolve_media_source(HOSPITAL_VIDEO_URL, is_video=True)
-        hospital_poster_src = self._resolve_media_source(HOSPITAL_VIDEO_POSTER, is_video=False)
-        statistics_video_src = self._resolve_media_source(STATISTICS_VIDEO_URL, is_video=True)
-        statistics_poster_src = self._resolve_media_source(STATISTICS_VIDEO_POSTER, is_video=False)
+        video_src = load_video_as_base64(KPI_INTERACTIVE_MAP_VIDEO_URL)
+        poster_src = load_image_as_base64(KPI_INTERACTIVE_MAP_VIDEO_POSTER)
+        inventory_video_src = load_video_as_base64(INVENTORY_VIDEO_URL)
+        inventory_poster_src = load_image_as_base64(INVENTORY_VIDEO_POSTER)
+        hospital_video_src = load_video_as_base64(HOSPITAL_VIDEO_URL)
+        hospital_poster_src = load_image_as_base64(HOSPITAL_VIDEO_POSTER)
+        statistics_video_src = load_video_as_base64(STATISTICS_VIDEO_URL)
+        statistics_poster_src = load_image_as_base64(STATISTICS_VIDEO_POSTER)
 
         kpi_video_html = (
             '<div class="mainpage-video-wrap">'
@@ -87,7 +110,7 @@ class MainPageView:
 
         hospital_video_html = (
             '<div class="mainpage-video-wrap">'
-            '<video class="mainpage-video" autoplay muted loop playsinline preload="metadata" '
+            '<video class="mainpage-video object-top" autoplay muted loop playsinline preload="metadata" '
             f'src="{hospital_video_src}" '
             + (f'poster="{hospital_poster_src}" ' if hospital_poster_src else "")
             + '></video>'
