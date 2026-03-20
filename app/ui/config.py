@@ -1,5 +1,5 @@
 DEFAULT_VIEW = "market_state"
-VALID_VIEWS = {"main_page", "market_state", "news", "settings", "profile", "logout"}
+VALID_VIEWS = {"main_page", "overview_map", "market_state", "news", "settings", "profile", "logout"}
 
 DEFAULT_TV_TOP_LINE_TRIM_PX = 1
 DEFAULT_TV_CHART_HEIGHT_PERCENT = 90

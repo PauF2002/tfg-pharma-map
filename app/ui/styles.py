@@ -562,6 +562,70 @@ section[data-testid="stSidebar"] {
     box-shadow: none !important;
 }
 
+.st-key-overview_map_panel {
+    background: #ffffff !important;
+    border-radius: 28px !important;
+    border: 1px solid #e5e7eb !important;
+    padding: 10px !important;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.06) !important;
+    height: calc(100dvh - 24px) !important;
+    max-height: calc(100dvh - 24px) !important;
+    overflow: hidden !important;
+}
+
+.st-key-overview_map_panel > div,
+.st-key-overview_map_panel [data-testid="stVerticalBlock"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.overview-kpi-card {
+    border: 1px solid #dbe3ee;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    min-height: 86px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.overview-kpi-label {
+    color: #334155;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1;
+}
+
+.overview-kpi-value {
+    color: #0f172a;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    margin-top: 4px;
+}
+
+.overview-ranking-title {
+    color: #0f172a;
+    font-size: 1.55rem;
+    font-weight: 700;
+    line-height: 1.1;
+    margin-top: 2px;
+    margin-bottom: 12px;
+}
+
+.st-key-overview_map_frame [data-testid="stIFrame"],
+.st-key-overview_map_frame iframe {
+    border: 1px solid #dbe3ee !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    background: #f8fafc !important;
+}
+
 .st-key-logout_panel {
     background: #ffffff !important;
     border-radius: 28px !important;
@@ -692,6 +756,11 @@ section[data-testid="stSidebar"] {
     grid-template-columns: repeat(2, minmax(240px, 1fr));
     gap: 18px;
     margin-top: 26px;
+}
+
+.mainpage-card-anchor {
+    text-decoration: none !important;
+    color: inherit !important;
 }
 
 .news-card,

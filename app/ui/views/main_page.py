@@ -12,6 +12,7 @@ from ..config import (
     STATISTICS_VIDEO_POSTER,
     STATISTICS_VIDEO_URL,
 )
+from ..state import build_view_href
 
 
 @st.cache_data
@@ -75,6 +76,8 @@ class MainPageView:
 
 
     def render(self) -> None:
+        overview_map_href = build_view_href("overview_map")
+
         video_src = load_video_as_base64(KPI_INTERACTIVE_MAP_VIDEO_URL)
         poster_src = load_image_as_base64(KPI_INTERACTIVE_MAP_VIDEO_POSTER)
         inventory_video_src = load_video_as_base64(INVENTORY_VIDEO_URL)
@@ -139,6 +142,7 @@ class MainPageView:
             '<div class="main-title">Main Page</div>'
             '<div class="main-text">Centro de acceso rapido a mapas, hospitales, inventario y reporting.</div>'
             '<div class="mainpage-grid">'
+            f'<a href="{overview_map_href}" target="_self" class="mainpage-card-anchor">'
             '<div class="mainpage-card mainpage-card-kpi">'
             '<div class="mainpage-card-top">'
             '<div>'
@@ -149,6 +153,7 @@ class MainPageView:
             '</div>'
             f'{kpi_video_html}'
             '</div>'
+            '</a>'
             '<div class="mainpage-card mainpage-card-compact">'
             '<div class="mainpage-card-top">'
             '<div>'
