@@ -53,15 +53,25 @@ class SidebarNavigation:
             '</a>'
         )
 
+    def rail_profile_item(self) -> str:
+        active_class = "active" if self.current_view == "profile" else ""
+        href = build_view_href("profile")
+        return (
+            f'<a href="{href}" target="_self" class="rail-avatar-link {active_class}">'
+            '<span>👤</span>'
+            '</a>'
+        )
+
     def _open_sidebar_html(self) -> str:
         profile_href = build_view_href("profile")
+        profile_name = st.session_state.get("current_user_name", DEFAULT_PROFILE_NAME)
         return (
             '<div class="sidebar-shell">'
             '<div class="sidebar-top">'
             f'<a href="{profile_href}" target="_self" class="profile-card-link">'
             '<div class="profile-card">'
             '<div class="avatar-circle">👤</div>'
-            f'<div class="profile-name">{DEFAULT_PROFILE_NAME} <span class="profile-check">✓</span></div>'
+            f'<div class="profile-name">{profile_name} <span class="profile-check">✓</span></div>'
             '</div>'
             '</a>'
             '<div class="nav-group">'
@@ -82,7 +92,7 @@ class SidebarNavigation:
             '<div class="rail-shell">'
             '<div class="rail-top">'
             '<div class="rail-logo">P</div>'
-            '<div class="rail-avatar">👤</div>'
+            f'{self.rail_profile_item()}'
             '<div class="rail-nav">'
             f'{self.rail_item("⌂", "main_page")}'
             f'{self.rail_item("▦", "market_state")}'

@@ -6,12 +6,14 @@ from .config import (
     DEFAULT_SELECTED_COMPANY,
     DEFAULT_TV_CHART_HEIGHT_PERCENT,
     DEFAULT_TV_EMBED_HEIGHT_PX,
+    DEFAULT_PROFILE_NAME,
     DEFAULT_TV_TOP_LINE_TRIM_PX,
     DEFAULT_VIEW,
     UI_ACCENT_OPTIONS,
     UI_FONT_OPTIONS,
     VALID_VIEWS,
 )
+from .user_data import get_or_create_default_user, load_user_preferences
 
 
 @dataclass
@@ -45,10 +47,20 @@ def initialize_ui_state() -> AppState:
     if "selected_market_symbol" not in st.session_state:
         st.session_state.selected_market_symbol = DEFAULT_SELECTED_COMPANY
 
-    qp_theme = st.query_params.get("theme", "Dark")
-    qp_font = st.query_params.get("font", "Moderna")
-    qp_accent = st.query_params.get("accent", "Cyan")
-    qp_size = st.query_params.get("size", "16")
+    if "current_user_id" not in st.session_state:
+        user = get_or_create_default_user(DEFAULT_PROFILE_NAME)
+        st.session_state.current_user_id = user["id"]
+        st.session_state.current_user_name = user["full_name"]
+        st.session_state.current_user_email = user["email"]
+        st.session_state.current_user_role = user["role"]
+        st.session_state.current_user_company = user["company"]
+
+    user_preferences = load_user_preferences(st.session_state.current_user_id)
+
+    qp_theme = st.query_params.get("theme")
+    qp_font = st.query_params.get("font")
+    qp_accent = st.query_params.get("accent")
+    qp_size = st.query_params.get("size")
 
     if isinstance(qp_theme, list):
         qp_theme = qp_theme[0]
@@ -60,17 +72,23 @@ def initialize_ui_state() -> AppState:
         qp_size = qp_size[0]
 
     if "ui_theme_mode" not in st.session_state:
-        st.session_state.ui_theme_mode = qp_theme if qp_theme in {"Dark", "Light"} else "Dark"
+        initial_theme = qp_theme if qp_theme in {"Dark", "Light"} else user_preferences["theme"]
+        st.session_state.ui_theme_mode = initial_theme if initial_theme in {"Dark", "Light"} else "Dark"
 
     if "ui_font_name" not in st.session_state:
-        st.session_state.ui_font_name = qp_font if qp_font in UI_FONT_OPTIONS else "Moderna"
+        initial_font = qp_font if qp_font in UI_FONT_OPTIONS else user_preferences["font"]
+        st.session_state.ui_font_name = initial_font if initial_font in UI_FONT_OPTIONS else "Moderna"
 
     if "ui_accent_name" not in st.session_state:
-        st.session_state.ui_accent_name = qp_accent if qp_accent in UI_ACCENT_OPTIONS else "Cyan"
+        initial_accent = qp_accent if qp_accent in UI_ACCENT_OPTIONS else user_preferences["accent"]
+        st.session_state.ui_accent_name = initial_accent if initial_accent in UI_ACCENT_OPTIONS else "Cyan"
 
     if "ui_base_font_size" not in st.session_state:
-        parsed_size = int(qp_size) if str(qp_size).isdigit() else 16
+        parsed_size = int(qp_size) if str(qp_size).isdigit() else int(user_preferences["base_font_size"])
         st.session_state.ui_base_font_size = min(20, max(14, parsed_size))
+
+    if "ui_email_notifications" not in st.session_state:
+        st.session_state.ui_email_notifications = bool(user_preferences["notifications"])
 
     persist_theme_query_params()
 

@@ -1,7 +1,7 @@
 import streamlit as st
 
 from ui import SidebarNavigation, initialize_ui_state, render_base_styles, render_theme_styles
-from ui.views import MainPageView, MarketStateView, NewsView, PlaceholderView, ProfileView, SettingsView
+from ui.views import LogoutView, MainPageView, MarketStateView, NewsView, ProfileView, SettingsView
 
 st.set_page_config(
     page_title="PharmaTFG",
@@ -19,10 +19,7 @@ views = {
     "news": NewsView(),
     "settings": SettingsView(),
     "profile": ProfileView(),
-    "logout": PlaceholderView(
-        title="Log Out",
-        text="Here you can later add the real logout flow, session reset, or a return-to-login screen.",
-    ),
+    "logout": LogoutView(),
 }
 
 sidebar_navigation = SidebarNavigation(app_state.current_view)

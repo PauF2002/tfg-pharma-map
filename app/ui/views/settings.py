@@ -1,10 +1,13 @@
 import streamlit as st
 
 from ..config import UI_ACCENT_OPTIONS, UI_FONT_OPTIONS
+from ..user_data import log_user_activity, save_user_preferences
 
 
 class SettingsView:
     def render(self) -> None:
+        user_id = st.session_state.current_user_id
+
         settings_panel = st.container(key="settings_panel")
         with settings_panel:
             st.markdown(
@@ -39,11 +42,41 @@ class SettingsView:
 
             reset_col, _ = st.columns([1.2, 4.8])
             with reset_col:
+                if st.button("Guardar ajustes", type="primary"):
+                    save_user_preferences(
+                        user_id=user_id,
+                        theme=st.session_state.ui_theme_mode,
+                        accent=st.session_state.ui_accent_name,
+                        font=st.session_state.ui_font_name,
+                        base_font_size=int(st.session_state.ui_base_font_size),
+                        notifications=bool(st.session_state.get("ui_email_notifications", True)),
+                    )
+                    log_user_activity(
+                        user_id,
+                        "Settings updated",
+                        (
+                            f"Tema={st.session_state.ui_theme_mode}, "
+                            f"Fuente={st.session_state.ui_font_name}, "
+                            f"Acento={st.session_state.ui_accent_name}, "
+                            f"Tamano={st.session_state.ui_base_font_size}"
+                        ),
+                    )
+                    st.success("Ajustes guardados.")
+
                 if st.button("Restablecer ajustes", type="secondary"):
                     st.session_state.ui_theme_mode = "Dark"
                     st.session_state.ui_font_name = "Moderna"
                     st.session_state.ui_accent_name = "Cyan"
                     st.session_state.ui_base_font_size = 16
+                    save_user_preferences(
+                        user_id=user_id,
+                        theme="Dark",
+                        accent="Cyan",
+                        font="Moderna",
+                        base_font_size=16,
+                        notifications=bool(st.session_state.get("ui_email_notifications", True)),
+                    )
+                    log_user_activity(user_id, "Settings reset", "Restablecimiento de ajustes visuales")
                     st.rerun()
 
             st.markdown(
