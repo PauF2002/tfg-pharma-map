@@ -280,6 +280,11 @@ section[data-testid="stSidebar"] {
     gap: 10px;
 }
 
+.profile-card-link:hover .profile-card {
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.18);
+}
+
 .avatar-circle {
     width: 88px;
     height: 88px;
@@ -405,7 +410,7 @@ section[data-testid="stSidebar"] {
     padding-bottom: 6px;
 }
 
-.rail-avatar {
+.rail-avatar-link {
     width: 38px;
     height: 38px;
     border-radius: 50%;
@@ -416,6 +421,25 @@ section[data-testid="stSidebar"] {
     align-items: center;
     justify-content: center;
     font-size: 1.15rem;
+    text-decoration: none !important;
+    transition: 0.18s ease;
+}
+
+.rail-avatar-link,
+.rail-avatar-link:link,
+.rail-avatar-link:visited,
+.rail-avatar-link span {
+    color: #f1f5f9 !important;
+}
+
+.rail-avatar-link:hover {
+    background: rgba(255,255,255,0.09);
+    border: 1px solid rgba(255,255,255,0.32);
+}
+
+.rail-avatar-link.active {
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.28);
 }
 
 .rail-nav,
@@ -440,6 +464,13 @@ section[data-testid="stSidebar"] {
     transition: 0.18s ease;
     background: transparent;
     border: 1px solid transparent;
+}
+
+.rail-item,
+.rail-item:link,
+.rail-item:visited,
+.rail-item span {
+    color: #e5e7eb !important;
 }
 
 .rail-item:hover {
@@ -512,6 +543,40 @@ section[data-testid="stSidebar"] {
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
+}
+
+.st-key-profile_panel {
+    background: #ffffff !important;
+    border-radius: 28px !important;
+    border: 1px solid #e5e7eb !important;
+    padding: 28px 32px !important;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.06) !important;
+    max-height: calc(100dvh - 24px) !important;
+    overflow: auto !important;
+}
+
+.st-key-profile_panel > div,
+.st-key-profile_panel [data-testid="stVerticalBlock"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.st-key-logout_panel {
+    background: #ffffff !important;
+    border-radius: 28px !important;
+    border: 1px solid #e5e7eb !important;
+    padding: 28px 32px !important;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.06) !important;
+    max-height: calc(100dvh - 24px) !important;
+    overflow: auto !important;
+}
+
+.st-key-logout_panel > div,
+.st-key-logout_panel [data-testid="stVerticalBlock"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 .main-kicker {
