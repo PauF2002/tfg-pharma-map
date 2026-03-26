@@ -3,6 +3,75 @@ import streamlit as st
 from .config import UI_ACCENT_OPTIONS, UI_FONT_OPTIONS
 
 
+def get_theme_tokens() -> dict[str, str]:
+    selected_font_stack = UI_FONT_OPTIONS[st.session_state.ui_font_name]
+    selected_accent_color = UI_ACCENT_OPTIONS[st.session_state.ui_accent_name]
+    selected_base_font_size = int(st.session_state.ui_base_font_size)
+
+    if st.session_state.ui_theme_mode == "Dark":
+        return {
+            "app_bg": "#0b1220",
+            "card_bg": "#111827",
+            "card_border": "#1f2937",
+            "title_color": "#f8fafc",
+            "text_color": "#cbd5e1",
+            "muted_text": "#94a3b8",
+            "news_bg": "linear-gradient(180deg, #111827 0%, #0f172a 100%)",
+            "news_border": "#334155",
+            "market_card_bg": "#000000",
+            "market_card_border": "#1f2937",
+            "control_bg": "#0f172a",
+            "control_border": "#334155",
+            "control_text": "#e2e8f0",
+            "label_color": "#cbd5e1",
+            "font_stack": selected_font_stack,
+            "accent_color": selected_accent_color,
+            "base_font_size": str(selected_base_font_size),
+        }
+
+    return {
+        "app_bg": "#f3f4f6",
+        "card_bg": "#ffffff",
+        "card_border": "#e5e7eb",
+        "title_color": "#111827",
+        "text_color": "#4b5563",
+        "muted_text": "#6b7280",
+        "news_bg": "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+        "news_border": "#dbe3ee",
+        "market_card_bg": "#ffffff",
+        "market_card_border": "#d1d5db",
+        "control_bg": "#ffffff",
+        "control_border": "#cbd5e1",
+        "control_text": "#0f172a",
+        "label_color": "#334155",
+        "font_stack": selected_font_stack,
+        "accent_color": selected_accent_color,
+        "base_font_size": str(selected_base_font_size),
+    }
+
+
+def get_embedded_theme_palette() -> dict[str, str]:
+    tokens = get_theme_tokens()
+    is_dark = st.session_state.ui_theme_mode == "Dark"
+
+    return {
+        "font_stack": tokens["font_stack"],
+        "app_bg": tokens["app_bg"],
+        "panel_bg": "rgba(15,23,42,0.56)" if is_dark else "rgba(255,255,255,0.56)",
+        "panel_soft_bg": "rgba(15,23,42,0.82)" if is_dark else "rgba(255,255,255,0.82)",
+        "card_border": tokens["card_border"],
+        "title_color": tokens["title_color"],
+        "text_color": tokens["text_color"],
+        "muted_text": tokens["muted_text"],
+        "label_color": tokens["label_color"],
+        "surface_bg": tokens["control_bg"],
+        "surface_border": tokens["control_border"],
+        "surface_text": tokens["control_text"],
+        "accent": tokens["accent_color"],
+        "accent_soft": f"{tokens['accent_color']}33",
+    }
+
+
 def render_base_styles() -> None:
     st.markdown(
         """
@@ -993,71 +1062,52 @@ section[data-testid="stSidebar"] {
 
 
 def render_theme_styles() -> None:
-    selected_font_stack = UI_FONT_OPTIONS[st.session_state.ui_font_name]
-    selected_accent_color = UI_ACCENT_OPTIONS[st.session_state.ui_accent_name]
-    selected_base_font_size = int(st.session_state.ui_base_font_size)
-
-    if st.session_state.ui_theme_mode == "Dark":
-        app_bg = "#0b1220"
-        card_bg = "#111827"
-        card_border = "#1f2937"
-        title_color = "#f8fafc"
-        text_color = "#cbd5e1"
-        muted_text = "#94a3b8"
-        news_bg = "linear-gradient(180deg, #111827 0%, #0f172a 100%)"
-        news_border = "#334155"
-        market_card_bg = "#000000"
-        market_card_border = "#1f2937"
-        control_bg = "#0f172a"
-        control_border = "#334155"
-        control_text = "#e2e8f0"
-        label_color = "#cbd5e1"
-    else:
-        app_bg = "#f3f4f6"
-        card_bg = "#ffffff"
-        card_border = "#e5e7eb"
-        title_color = "#111827"
-        text_color = "#4b5563"
-        muted_text = "#6b7280"
-        news_bg = "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)"
-        news_border = "#dbe3ee"
-        market_card_bg = "#ffffff"
-        market_card_border = "#d1d5db"
-        control_bg = "#ffffff"
-        control_border = "#cbd5e1"
-        control_text = "#0f172a"
-        label_color = "#334155"
+    tokens = get_theme_tokens()
 
     st.markdown(
         f"""
 <style>
+:root {{
+    --ui-app-bg: {tokens['app_bg']};
+    --ui-card-bg: {tokens['card_bg']};
+    --ui-card-border: {tokens['card_border']};
+    --ui-title: {tokens['title_color']};
+    --ui-text: {tokens['text_color']};
+    --ui-muted: {tokens['muted_text']};
+    --ui-surface: {tokens['control_bg']};
+    --ui-surface-border: {tokens['control_border']};
+    --ui-surface-text: {tokens['control_text']};
+    --ui-label: {tokens['label_color']};
+    --ui-accent: {tokens['accent_color']};
+}}
+
 html, body, [data-testid="stAppViewContainer"], .stApp {{
-    background: {app_bg} !important;
-    font-family: {selected_font_stack} !important;
-    font-size: {selected_base_font_size}px !important;
+    background: {tokens['app_bg']} !important;
+    font-family: {tokens['font_stack']} !important;
+    font-size: {tokens['base_font_size']}px !important;
 }}
 
 [data-testid="stAppViewContainer"] *,
 [data-testid="stAppViewContainer"] *::before,
 [data-testid="stAppViewContainer"] *::after {{
-    font-family: {selected_font_stack} !important;
+    font-family: {tokens['font_stack']} !important;
 }}
 
 .main-card {{
-    background: {card_bg} !important;
-    border-color: {card_border} !important;
+    background: {tokens['card_bg']} !important;
+    border-color: {tokens['card_border']} !important;
 }}
 
 .st-key-market_state_card {{
-    background: {market_card_bg} !important;
-    border-color: {market_card_border} !important;
+    background: {tokens['market_card_bg']} !important;
+    border-color: {tokens['market_card_border']} !important;
 }}
 
 .market-title,
 .main-title,
 .news-card-title,
 .mainpage-card-title {{
-    color: {title_color} !important;
+    color: {tokens['title_color']} !important;
 }}
 
 .main-text,
@@ -1065,7 +1115,7 @@ html, body, [data-testid="stAppViewContainer"], .stApp {{
 .news-card-text,
 .mainpage-card-text,
 .settings-preview-text {{
-    color: {text_color} !important;
+    color: {tokens['text_color']} !important;
 }}
 
 .main-kicker,
@@ -1073,7 +1123,7 @@ html, body, [data-testid="stAppViewContainer"], .stApp {{
 .mainpage-card-kicker,
 .mainpage-card-tag,
 .settings-preview-sub {{
-    color: {muted_text} !important;
+    color: {tokens['muted_text']} !important;
 }}
 
 .news-card-link,
@@ -1081,24 +1131,24 @@ html, body, [data-testid="stAppViewContainer"], .stApp {{
 .st-key-settings_panel h2,
 .st-key-settings_panel h3,
 .settings-preview-title {{
-    color: {selected_accent_color} !important;
+    color: {tokens['accent_color']} !important;
 }}
 
 .nav-item.active,
 .rail-item.active {{
-    border-color: {selected_accent_color}66 !important;
-    box-shadow: inset 0 0 0 1px {selected_accent_color}44 !important;
+    border-color: {tokens['accent_color']}66 !important;
+    box-shadow: inset 0 0 0 1px {tokens['accent_color']}44 !important;
 }}
 
 .mainpage-card,
 .news-card {{
-    background: {news_bg} !important;
-    border-color: {news_border} !important;
+    background: {tokens['news_bg']} !important;
+    border-color: {tokens['news_border']} !important;
 }}
 
 .mainpage-card-icon {{
-    border-color: {selected_accent_color}33 !important;
-    background: {selected_accent_color}14 !important;
+    border-color: {tokens['accent_color']}33 !important;
+    background: {tokens['accent_color']}14 !important;
 }}
 
 .market-kicker {{
@@ -1106,8 +1156,8 @@ html, body, [data-testid="stAppViewContainer"], .stApp {{
 }}
 
 .st-key-settings_panel {{
-    background: {card_bg} !important;
-    border-color: {card_border} !important;
+    background: {tokens['card_bg']} !important;
+    border-color: {tokens['card_border']} !important;
 }}
 
 .st-key-settings_panel [data-testid="stHeading"],
@@ -1116,14 +1166,14 @@ html, body, [data-testid="stAppViewContainer"], .stApp {{
 .st-key-settings_panel p,
 .st-key-settings_panel span,
 .st-key-settings_panel div {{
-    color: {label_color} !important;
+    color: {tokens['label_color']} !important;
 }}
 
 .st-key-settings_panel [data-baseweb="select"] > div,
 .st-key-settings_panel [data-baseweb="slider"] > div,
 .st-key-settings_panel [data-baseweb="radio"] > div {{
-    background: {control_bg} !important;
-    border-color: {control_border} !important;
+    background: {tokens['control_bg']} !important;
+    border-color: {tokens['control_border']} !important;
 }}
 
 .st-key-settings_panel [data-baseweb="select"] *,
@@ -1131,18 +1181,18 @@ html, body, [data-testid="stAppViewContainer"], .stApp {{
 .st-key-settings_panel [data-baseweb="slider"] *,
 .st-key-settings_panel [data-testid="stSliderTickBarMin"],
 .st-key-settings_panel [data-testid="stSliderThumbValue"] {{
-    color: {control_text} !important;
+    color: {tokens['control_text']} !important;
 }}
 
 .st-key-settings_panel button {{
-    color: {control_text} !important;
-    border-color: {control_border} !important;
-    background: {control_bg} !important;
+    color: {tokens['control_text']} !important;
+    border-color: {tokens['control_border']} !important;
+    background: {tokens['control_bg']} !important;
 }}
 
 .settings-preview {{
-    border: 1px solid {card_border};
-    background: {control_bg};
+    border: 1px solid {tokens['card_border']};
+    background: {tokens['control_bg']};
 }}
 </style>
         """,

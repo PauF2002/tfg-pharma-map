@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from urllib.parse import urlencode
 
 import streamlit as st
 
@@ -102,14 +103,22 @@ def persist_theme_query_params() -> None:
     st.query_params["size"] = str(st.session_state.ui_base_font_size)
 
 
-def build_view_href(view_key: str) -> str:
-    return (
+def build_view_href(view_key: str, extra_params: dict[str, str] | None = None) -> str:
+    base = (
         f"?view={view_key}"
         f"&theme={st.session_state.ui_theme_mode}"
         f"&font={st.session_state.ui_font_name}"
         f"&accent={st.session_state.ui_accent_name}"
         f"&size={st.session_state.ui_base_font_size}"
     )
+    if not extra_params:
+        return base
+
+    clean_extra = {str(k): str(v) for k, v in extra_params.items() if v is not None}
+    if not clean_extra:
+        return base
+
+    return f"{base}&{urlencode(clean_extra)}"
 
 
 def toggle_sidebar() -> None:

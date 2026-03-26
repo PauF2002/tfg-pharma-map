@@ -1,7 +1,7 @@
 import streamlit as st
 
 from ui import SidebarNavigation, initialize_ui_state, render_base_styles, render_theme_styles
-from ui.views import LogoutView, MainPageView, MarketStateView, NewsView, OverviewMapView, ProfileView, SettingsView
+from ui.views import CcaaDetailView, LogoutView, MainPageView, MarketStateView, NewsView, OverviewMapView, ProfileView, SettingsView
 
 st.set_page_config(
     page_title="PharmaTFG",
@@ -16,6 +16,7 @@ render_theme_styles()
 views = {
     "main_page": MainPageView(),
     "overview_map": OverviewMapView(),
+    "ccaa_detail": CcaaDetailView(),
     "market_state": MarketStateView(),
     "news": NewsView(),
     "settings": SettingsView(),

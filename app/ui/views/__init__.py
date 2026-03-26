@@ -1,4 +1,5 @@
 from .main_page import MainPageView
+from .ccaa_detail import CcaaDetailView
 from .market_state import MarketStateView
 from .news import NewsView
 from .logout import LogoutView
