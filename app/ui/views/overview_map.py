@@ -103,17 +103,48 @@ class OverviewMapView:
             ranking_df["Beds"] = ranking_df["Beds"].round(2)
             ranking_df["Market"] = ranking_df["Market"].round(2)
 
+            fallback_flag_url = "https://upload.wikimedia.org/wikipedia/commons/9/9a/Flag_of_Spain.svg"
+            ccaa_flag_by_name = {
+                "Andalucía": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Flag_of_Andaluc%C3%ADa.svg/640px-Flag_of_Andaluc%C3%ADa.svg.png",
+                "Aragón": "https://upload.wikimedia.org/wikipedia/commons/1/18/Flag_of_Aragon.svg",
+                "Ppdo. de Asturias": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Flag_of_Asturias.svg",
+                "Principado de Asturias": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Flag_of_Asturias.svg",
+                "Illes Balears": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Flag_of_the_Balearic_Islands.svg/640px-Flag_of_the_Balearic_Islands.svg.png",
+                "Canarias": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Flag_of_Canary_Islands%2C_version.svg/640px-Flag_of_Canary_Islands%2C_version.svg.png",
+                "Cantabria": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Flag_of_Cantabria.svg/640px-Flag_of_Cantabria.svg.png",
+                "Castilla y León": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Flag_of_Castile_and_Le%C3%B3n.svg/640px-Flag_of_Castile_and_Le%C3%B3n.svg.png",
+                "Castilla-La Mancha": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Flag_of_Castile-La_Mancha.svg/640px-Flag_of_Castile-La_Mancha.svg.png",
+                "Cataluña": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Flag_of_Catalonia.svg",
+                "Comunidad Valenciana": "https://upload.wikimedia.org/wikipedia/commons/1/16/Flag_of_the_Valencian_Community_%282x3%29.svg",
+                "Extremadura": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Flag_Extremadura.svg/640px-Flag_Extremadura.svg.png",
+                "Galicia": "https://upload.wikimedia.org/wikipedia/commons/6/64/Flag_of_Galicia.svg",
+                "Madrid": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Flag_of_the_Community_of_Madrid.svg",
+                "Comunidad de Madrid": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Flag_of_the_Community_of_Madrid.svg",
+                "Región de Murcia": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Flag_of_the_Region_of_Murcia.svg/640px-Flag_of_the_Region_of_Murcia.svg.png",
+                "C. Foral de Navarra": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Bandera_de_Navarra.svg/640px-Bandera_de_Navarra.svg.png",
+                "Comunidad Foral de Navarra": "https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Navarre.svg",
+                "País Vasco": "https://upload.wikimedia.org/wikipedia/commons/2/2d/Flag_of_the_Basque_Country.svg",
+                "La Rioja": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Bandera_Republicana_de_La_Rioja.png/640px-Bandera_Republicana_de_La_Rioja.png",
+                "Ceuta": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Flag_of_Ceuta.svg",
+                "Melilla": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Flag_Melilla.svg/640px-Flag_Melilla.svg.png",
+            }
+            ccaa_flag_by_norm = {self._norm_text(name): url for name, url in ccaa_flag_by_name.items()}
+
             code_to_ccaa = self._build_code_to_ccaa_map(score_df, boundaries_path)
             detail_base_href = build_view_href("ccaa_detail")
 
             rows_html = []
             for _, row in ranking_df.iterrows():
                 ccaa_name = str(row["CCAA"])
+                ccaa_flag_url = ccaa_flag_by_norm.get(self._norm_text(ccaa_name), fallback_flag_url)
                 detail_href = build_view_href("ccaa_detail", {"ccaa": ccaa_name})
                 rows_html.append(
                     "<tr>"
                     "<td class='ccaa-cell'>"
+                    "<span class='ccaa-name-wrap'>"
+                    f"<img class='ccaa-flag-mini' src='{html_lib.escape(ccaa_flag_url, quote=True)}' alt='Bandera {html_lib.escape(ccaa_name)}' loading='lazy' onerror='this.onerror=null;this.src=\"{html_lib.escape(fallback_flag_url, quote=True)}\";' />"
                     f"<span class='ccaa-name'>{html_lib.escape(ccaa_name)}</span>"
+                    "</span>"
                     f"<a class='ccaa-hover-btn' href='{html_lib.escape(detail_href, quote=True)}' target='_blank' rel='noopener noreferrer'>Ir</a>"
                     "</td>"
                     f"<td>{float(row['KPI']):.2f}</td>"
@@ -346,16 +377,16 @@ html, body {{
     font-size: 0.8rem;
 }}
 .ranking-table col:nth-child(1) {{
-    width: 44%;
+    width: 52.8%;
 }}
 .ranking-table col:nth-child(2) {{
-    width: 18%;
+    width: 14.8%;
 }}
 .ranking-table col:nth-child(3) {{
-    width: 18%;
+    width: 14.8%;
 }}
 .ranking-table col:nth-child(4) {{
-    width: 20%;
+    width: 17.6%;
 }}
 .ranking-table th,
 .ranking-table td {{
@@ -381,6 +412,20 @@ html, body {{
     justify-content: space-between;
     gap: 6px;
     min-width: 0;
+}}
+.ccaa-name-wrap {{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}}
+.ccaa-flag-mini {{
+    width: 16px;
+    height: 11px;
+    object-fit: cover;
+    border-radius: 2px;
+    border: 1px solid {palette['surface_border']};
+    flex: 0 0 auto;
 }}
 .ccaa-name {{
     color: {palette['title_color']};
