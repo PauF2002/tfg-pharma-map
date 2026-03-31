@@ -2,6 +2,8 @@ from pathlib import Path
 import html as html_lib
 import json
 import unicodedata
+import base64
+import mimetypes
 
 import pandas as pd
 import streamlit as st
@@ -18,6 +20,56 @@ class OverviewMapView:
         text = unicodedata.normalize("NFKD", text)
         text = "".join(ch for ch in text if not unicodedata.combining(ch))
         return " ".join(text.replace("-", " ").split())
+
+    @staticmethod
+    def _file_to_data_uri(file_path: Path) -> str | None:
+        if not file_path.exists():
+            return None
+
+        try:
+            binary = file_path.read_bytes()
+        except OSError:
+            return None
+
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+        if not mime_type:
+            mime_type = "image/png"
+        encoded = base64.b64encode(binary).decode("ascii")
+        return f"data:{mime_type};base64,{encoded}"
+
+    @classmethod
+    def _build_local_flag_map(cls, flags_dir: Path) -> dict[str, str]:
+        local_flag_files = {
+            "Andalucía": "Flag_of_Andalucía.svg.png",
+            "Aragón": "Flag_of_Aragon.svg",
+            "Ppdo. de Asturias": "Flag_of_Asturias.svg",
+            "Principado de Asturias": "Flag_of_Asturias.svg",
+            "Illes Balears": "Flag_of_the_Balearic_Islands.svg.png",
+            "Canarias": "CANARIAS.jpg",
+            "Cantabria": "Flag_of_Cantabria.svg.png",
+            "Castilla y León": "Flag_of_Castile_and_León.svg.png",
+            "Castilla-La Mancha": "Flag_of_Castile-La_Mancha.svg.png",
+            "Cataluña": "Flag_of_Catalonia.svg",
+            "Comunidad Valenciana": "Flag_of_the_Valencian_Community_(2x3).svg",
+            "Extremadura": "Flag_of_Extremadura,_Spain_(with_coat_of_arms).svg.png",
+            "Galicia": "Flag_of_Galicia.svg",
+            "Madrid": "Flag_of_the_Community_of_Madrid.svg",
+            "Comunidad de Madrid": "Flag_of_the_Community_of_Madrid.svg",
+            "Región de Murcia": "Flag_of_the_Region_of_Murcia.svg.png",
+            "C. Foral de Navarra": "Bandera_de_Navarra.svg.png",
+            "Comunidad Foral de Navarra": "Bandera_de_Navarra.svg.png",
+            "País Vasco": "Flag_of_the_Basque_Country.svg",
+            "La Rioja": "Bandera_Republicana_de_La_Rioja.png",
+            "Ceuta": "Flag_of_Ceuta.svg",
+            "Melilla": "Flag_of_Melilla.svg.png",
+        }
+
+        local_flags: dict[str, str] = {}
+        for ccaa_name, filename in local_flag_files.items():
+            data_uri = cls._file_to_data_uri(flags_dir / filename)
+            if data_uri:
+                local_flags[cls._norm_text(ccaa_name)] = data_uri
+        return local_flags
 
     @classmethod
     def _build_code_to_ccaa_map(cls, score_df: pd.DataFrame, boundaries_path: Path) -> dict[str, str]:
@@ -75,6 +127,7 @@ class OverviewMapView:
         boundaries_path = project_root / "data" / "raw" / "ccaa_boundaries.geojson"
         score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
         hospital_path = project_root / "data" / "processed" / "ccaa_hospital_summary.csv"
+        flags_dir = project_root / "app" / "assets" / "fotos"
 
         overview_panel = st.container(key="overview_map_panel")
         with overview_panel:
@@ -104,31 +157,7 @@ class OverviewMapView:
             ranking_df["Market"] = ranking_df["Market"].round(2)
 
             fallback_flag_url = "https://upload.wikimedia.org/wikipedia/commons/9/9a/Flag_of_Spain.svg"
-            ccaa_flag_by_name = {
-                "Andalucía": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Flag_of_Andaluc%C3%ADa.svg/640px-Flag_of_Andaluc%C3%ADa.svg.png",
-                "Aragón": "https://upload.wikimedia.org/wikipedia/commons/1/18/Flag_of_Aragon.svg",
-                "Ppdo. de Asturias": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Flag_of_Asturias.svg",
-                "Principado de Asturias": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Flag_of_Asturias.svg",
-                "Illes Balears": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Flag_of_the_Balearic_Islands.svg/640px-Flag_of_the_Balearic_Islands.svg.png",
-                "Canarias": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Flag_of_Canary_Islands%2C_version.svg/640px-Flag_of_Canary_Islands%2C_version.svg.png",
-                "Cantabria": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Flag_of_Cantabria.svg/640px-Flag_of_Cantabria.svg.png",
-                "Castilla y León": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Flag_of_Castile_and_Le%C3%B3n.svg/640px-Flag_of_Castile_and_Le%C3%B3n.svg.png",
-                "Castilla-La Mancha": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Flag_of_Castile-La_Mancha.svg/640px-Flag_of_Castile-La_Mancha.svg.png",
-                "Cataluña": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Flag_of_Catalonia.svg",
-                "Comunidad Valenciana": "https://upload.wikimedia.org/wikipedia/commons/1/16/Flag_of_the_Valencian_Community_%282x3%29.svg",
-                "Extremadura": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Flag_Extremadura.svg/640px-Flag_Extremadura.svg.png",
-                "Galicia": "https://upload.wikimedia.org/wikipedia/commons/6/64/Flag_of_Galicia.svg",
-                "Madrid": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Flag_of_the_Community_of_Madrid.svg",
-                "Comunidad de Madrid": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Flag_of_the_Community_of_Madrid.svg",
-                "Región de Murcia": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Flag_of_the_Region_of_Murcia.svg/640px-Flag_of_the_Region_of_Murcia.svg.png",
-                "C. Foral de Navarra": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Bandera_de_Navarra.svg/640px-Bandera_de_Navarra.svg.png",
-                "Comunidad Foral de Navarra": "https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Navarre.svg",
-                "País Vasco": "https://upload.wikimedia.org/wikipedia/commons/2/2d/Flag_of_the_Basque_Country.svg",
-                "La Rioja": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Bandera_Republicana_de_La_Rioja.png/640px-Bandera_Republicana_de_La_Rioja.png",
-                "Ceuta": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Flag_of_Ceuta.svg",
-                "Melilla": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Flag_Melilla.svg/640px-Flag_Melilla.svg.png",
-            }
-            ccaa_flag_by_norm = {self._norm_text(name): url for name, url in ccaa_flag_by_name.items()}
+            ccaa_flag_by_norm = self._build_local_flag_map(flags_dir)
 
             code_to_ccaa = self._build_code_to_ccaa_map(score_df, boundaries_path)
             detail_base_href = build_view_href("ccaa_detail")
@@ -284,7 +313,7 @@ html, body {{
 }}
 .kpi-chip {{
     min-width: 132px;
-    background: {palette['panel_bg']};
+    background: color-mix(in srgb, {palette['panel_bg']} 78%, transparent);
     border: 1px solid {palette['card_border']};
     border-radius: 12px;
     padding: 8px 12px;
@@ -310,7 +339,7 @@ html, body {{
     left: 50px;
     z-index: 25;
     min-width: 164px;
-    background: {palette['panel_bg']};
+    background: color-mix(in srgb, {palette['panel_bg']} 76%, transparent);
     border: 1px solid {palette['card_border']};
     border-radius: 10px;
     padding: 6px 8px;
@@ -349,7 +378,7 @@ html, body {{
     width: 28.5%;
     min-width: 240px;
     max-width: 380px;
-    background: {palette['panel_bg']};
+    background: color-mix(in srgb, {palette['panel_bg']} 78%, transparent);
     border: 1px solid {palette['card_border']};
     border-radius: 14px;
     box-shadow: 0 8px 24px rgba(15,23,42,0.15);

@@ -2,6 +2,8 @@ from pathlib import Path
 import html as html_lib
 import json
 import unicodedata
+import base64
+import mimetypes
 
 import pandas as pd
 import streamlit as st
@@ -25,6 +27,56 @@ class CcaaDetailView:
         text = unicodedata.normalize("NFKD", text)
         text = "".join(ch for ch in text if not unicodedata.combining(ch))
         return " ".join(text.replace("-", " ").split())
+
+    @staticmethod
+    def _file_to_data_uri(file_path: Path) -> str | None:
+        if not file_path.exists():
+            return None
+
+        try:
+            binary = file_path.read_bytes()
+        except OSError:
+            return None
+
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+        if not mime_type:
+            mime_type = "image/png"
+        encoded = base64.b64encode(binary).decode("ascii")
+        return f"data:{mime_type};base64,{encoded}"
+
+    @classmethod
+    def _build_local_flag_map(cls, flags_dir: Path) -> dict[str, str]:
+        local_flag_files = {
+            "Andalucía": "Flag_of_Andalucía.svg.png",
+            "Aragón": "Flag_of_Aragon.svg",
+            "Ppdo. de Asturias": "Flag_of_Asturias.svg",
+            "Principado de Asturias": "Flag_of_Asturias.svg",
+            "Illes Balears": "Flag_of_the_Balearic_Islands.svg.png",
+            "Canarias": "CANARIAS.jpg",
+            "Cantabria": "Flag_of_Cantabria.svg.png",
+            "Castilla y León": "Flag_of_Castile_and_León.svg.png",
+            "Castilla-La Mancha": "Flag_of_Castile-La_Mancha.svg.png",
+            "Cataluña": "Flag_of_Catalonia.svg",
+            "Comunidad Valenciana": "Flag_of_the_Valencian_Community_(2x3).svg",
+            "Extremadura": "Flag_of_Extremadura,_Spain_(with_coat_of_arms).svg.png",
+            "Galicia": "Flag_of_Galicia.svg",
+            "Madrid": "Flag_of_the_Community_of_Madrid.svg",
+            "Comunidad de Madrid": "Flag_of_the_Community_of_Madrid.svg",
+            "Región de Murcia": "Flag_of_the_Region_of_Murcia.svg.png",
+            "C. Foral de Navarra": "Bandera_de_Navarra.svg.png",
+            "Comunidad Foral de Navarra": "Bandera_de_Navarra.svg.png",
+            "País Vasco": "Flag_of_the_Basque_Country.svg",
+            "La Rioja": "Bandera_Republicana_de_La_Rioja.png",
+            "Ceuta": "Flag_of_Ceuta.svg",
+            "Melilla": "Flag_of_Melilla.svg.png",
+        }
+
+        local_flags: dict[str, str] = {}
+        for ccaa_name, filename in local_flag_files.items():
+            data_uri = cls._file_to_data_uri(flags_dir / filename)
+            if data_uri:
+                local_flags[cls._norm_text(ccaa_name)] = data_uri
+        return local_flags
 
     @classmethod
     def _build_score_name_to_code_map(cls, score_df: pd.DataFrame, boundaries_path: Path) -> dict[str, str]:
@@ -349,6 +401,7 @@ class CcaaDetailView:
         hospitals_path = project_root / "data" / "raw" / "CNH_2024_geocoded.csv"
         score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
         market_path = project_root / "data" / "processed" / "ccaa_market_monthly.csv"
+        flags_dir = project_root / "app" / "assets" / "fotos"
 
         if not score_path.exists() or not market_path.exists():
             st.error("Faltan archivos para construir el detalle CCAA. Revisa data/processed.")
@@ -372,7 +425,7 @@ class CcaaDetailView:
         selected_ccaa = selected_qp
 
         overview_href = build_view_href("overview_map")
-        market_href = build_view_href("market_state")
+        target_href = build_view_href("market_state", {"ccaa": selected_ccaa})
         detail_base_href = build_view_href("ccaa_detail")
 
         selected_row = score_df[score_df["CCAA"] == selected_ccaa]
@@ -391,55 +444,139 @@ class CcaaDetailView:
         month_series = month_series.dropna(subset=["market_monthly_eur_per_capita", "year_month"])
         month_series = month_series.sort_values("year_month").tail(6)
 
+        spain_monthly_reference = market_df[["year_month", "market_monthly_eur_per_capita"]].copy()
+        spain_monthly_reference["market_monthly_eur_per_capita"] = pd.to_numeric(
+            spain_monthly_reference["market_monthly_eur_per_capita"], errors="coerce"
+        )
+        spain_monthly_reference = (
+            spain_monthly_reference.dropna(subset=["year_month", "market_monthly_eur_per_capita"])
+            .groupby("year_month", as_index=True)["market_monthly_eur_per_capita"]
+            .mean()
+        )
+
         bars_html = ""
+        chart_legend_html = ""
+        chart_summary_html = ""
         if month_series.empty:
             bars_html = '<div class="ccaa-chart-empty">Sin serie mensual disponible</div>'
+            chart_summary_html = (
+                '<div class="ccaa-chart-summary">'
+                '<div class="ccaa-summary-note">No hay datos suficientes para comparar esta CCAA con la media nacional.</div>'
+                "</div>"
+            )
         else:
-            max_value = float(month_series["market_monthly_eur_per_capita"].max())
+            month_series["spain_ref"] = month_series["year_month"].map(spain_monthly_reference)
+            month_values = pd.to_numeric(month_series["market_monthly_eur_per_capita"], errors="coerce")
+            max_value = float(month_values.max())
+            min_value = float(month_values.min())
+            value_range = max_value - min_value
+            peak_idx = month_series["market_monthly_eur_per_capita"].idxmax()
+            peak_month = month_series.loc[peak_idx]
+            selected_avg_6m = pd.to_numeric(month_series["market_monthly_eur_per_capita"], errors="coerce").mean()
+            spain_avg_6m = pd.to_numeric(month_series["spain_ref"], errors="coerce").mean()
+            first_value = pd.to_numeric(month_series["market_monthly_eur_per_capita"], errors="coerce").iloc[0]
+            last_value = pd.to_numeric(month_series["market_monthly_eur_per_capita"], errors="coerce").iloc[-1]
+            trend_pct = ((last_value - first_value) / first_value * 100.0) if pd.notna(first_value) and first_value > 0 else float("nan")
+            last_mom_pct = float("nan")
+            if len(month_series) >= 2:
+                prev_value = pd.to_numeric(
+                    pd.Series([month_series["market_monthly_eur_per_capita"].iloc[-2]]), errors="coerce"
+                ).iloc[0]
+                if pd.notna(prev_value) and prev_value > 0:
+                    last_mom_pct = ((last_value - prev_value) / prev_value) * 100.0
             bars = []
             for _, row in month_series.iterrows():
                 value = float(row["market_monthly_eur_per_capita"])
-                bar_height = max(8.0, (value / max_value) * 100.0) if max_value > 0 else 8.0
+                # Spread bars across available height based on local 6-month range
+                # so month-to-month differences remain visible even with close values.
+                if value_range > 0:
+                    normalized = (value - min_value) / value_range
+                    bar_height = 22.0 + (normalized * 78.0)
+                else:
+                    bar_height = 60.0
                 ym = str(row["year_month"])
                 ym_label = ym[2:7] if len(ym) >= 7 else ym
+
+                ref_value = pd.to_numeric(pd.Series([row.get("spain_ref")]), errors="coerce").iloc[0]
+                if pd.notna(ref_value) and float(ref_value) > 0:
+                    ratio = value / float(ref_value)
+                    if ratio >= 1.10:
+                        status_class = "high"
+                        status_label = "Sobre ref"
+                    elif ratio <= 0.90:
+                        status_class = "low"
+                        status_label = "Bajo ref"
+                    else:
+                        status_class = "neutral"
+                        status_label = "En ref"
+                    delta_text = f" ({value - float(ref_value):+.2f})"
+                    tooltip_ref = f" | Ref Espana: {float(ref_value):.2f}"
+                    ref_label = f"Ref {float(ref_value):.1f}"
+                else:
+                    status_class = "neutral"
+                    status_label = "Sin ref"
+                    delta_text = ""
+                    tooltip_ref = ""
+                    ref_label = "Ref --"
+
+                is_peak = int(row.name) == int(peak_idx)
+                peak_class = " ccaa-bar-peak" if is_peak else ""
+                label_class = f"{status_class} peak" if is_peak else status_class
                 bars.append(
                     '<div class="ccaa-bar-wrap">'
-                    f'<div class="ccaa-bar" style="height:{bar_height:.1f}%" title="{value:.2f} EUR/cap"></div>'
-                    f'<div class="ccaa-bar-label">{html_lib.escape(ym_label)}</div>'
+                    f'<div class="ccaa-bar-status {status_class}{peak_class}">{status_label}</div>'
+                    f'<div class="ccaa-bar-value {label_class}">{value:.1f}</div>'
+                    f'<div class="ccaa-bar {status_class}{peak_class}" style="height:{bar_height:.1f}%" title="{value:.2f} EUR/cap{tooltip_ref}{delta_text}"></div>'
+                    f'<div class="ccaa-bar-ref {status_class}">{ref_label}</div>'
+                    f'<div class="ccaa-bar-label {label_class}">{html_lib.escape(ym_label)}</div>'
                     "</div>"
                 )
             bars_html = "".join(bars)
 
-        metric_rows = []
-
-        def add_metric_row(label: str, col: str, lower_is_better: bool = False, suffix: str = "") -> None:
-            selected_value = pd.to_numeric(pd.Series([selected_row.get(col)]), errors="coerce").iloc[0]
-            cv_value = pd.to_numeric(pd.Series([cv_row.get(col)]), errors="coerce").iloc[0]
-
-            if pd.isna(selected_value) or pd.isna(cv_value):
-                symbol = "-"
-                status_class = "neutral"
-            else:
-                if lower_is_better:
-                    better = selected_value <= cv_value
-                else:
-                    better = selected_value >= cv_value
-                symbol = "+" if better else "-"
-                status_class = "good" if better else "bad"
-
-            metric_rows.append(
-                "<tr>"
-                f"<td>{html_lib.escape(label)}</td>"
-                f"<td>{self._fmt(selected_value, suffix=suffix)}</td>"
-                f"<td>{self._fmt(cv_value, suffix=suffix)}</td>"
-                f"<td class='status {status_class}'>{symbol}</td>"
-                "</tr>"
+            chart_legend_html = (
+                '<div class="ccaa-chart-legend">'
+                '<span class="ccaa-legend-item"><span class="ccaa-legend-dot high"></span>Sobre ref (+10%)</span>'
+                '<span class="ccaa-legend-item"><span class="ccaa-legend-dot neutral"></span>En rango (+/-10%)</span>'
+                '<span class="ccaa-legend-item"><span class="ccaa-legend-dot low"></span>Bajo ref (-10%)</span>'
+                '<span class="ccaa-legend-item"><span class="ccaa-legend-dot peak"></span>Mes pico (6m)</span>'
+                "</div>"
             )
 
-        add_metric_row("Opportunity score", "opportunity_score")
-        add_metric_row("Beds / 100k", "beds_per_100k")
-        add_metric_row("Market 12m EUR/cap", "market_12m_avg_eur_per_capita")
-        add_metric_row("Obesity %", "obesity_pct", lower_is_better=True, suffix="%")
+            if pd.notna(selected_avg_6m) and pd.notna(spain_avg_6m):
+                avg_gap = float(selected_avg_6m - spain_avg_6m)
+                avg_gap_text = f"{avg_gap:+.2f} EUR/cap"
+                gap_class = "up" if avg_gap >= 0 else "down"
+            else:
+                avg_gap_text = "sin ref"
+                gap_class = "flat"
+
+            if pd.notna(trend_pct):
+                trend_text = f"{trend_pct:+.1f}%"
+                trend_class = "up" if trend_pct >= 0 else "down"
+            else:
+                trend_text = "sin base"
+                trend_class = "flat"
+
+            if pd.notna(last_mom_pct):
+                mom_text = f"{last_mom_pct:+.1f}%"
+                mom_class = "up" if last_mom_pct >= 0 else "down"
+            else:
+                mom_text = "sin base"
+                mom_class = "flat"
+
+            chart_summary_html = (
+                '<div class="ccaa-chart-summary">'
+                '<div class="ccaa-summary-grid">'
+                f'<div class="ccaa-summary-item"><span>Media 6m {html_lib.escape(selected_ccaa)}</span><strong>{self._fmt(selected_avg_6m)} EUR/cap</strong></div>'
+                f'<div class="ccaa-summary-item"><span>Media 6m Espana</span><strong>{self._fmt(spain_avg_6m)} EUR/cap</strong></div>'
+                "</div>"
+                '<div class="ccaa-inline-kpis">'
+                f'<span class="ccaa-kpi-pill {gap_class}">Gap 6m: {avg_gap_text}</span>'
+                f'<span class="ccaa-kpi-pill {trend_class}">Tendencia 6m: {trend_text}</span>'
+                f'<span class="ccaa-kpi-pill {mom_class}">Ultimo mes: {mom_text}</span>'
+                "</div>"
+                "</div>"
+            )
 
         selected_kpi = pd.to_numeric(pd.Series([selected_row.get("opportunity_score")]), errors="coerce").iloc[0]
         spain_kpi_avg = pd.to_numeric(score_df["opportunity_score"], errors="coerce").mean()
@@ -451,6 +588,7 @@ class CcaaDetailView:
         selected_code = score_name_to_code.get(selected_ccaa, "")
 
         hospital_points: list[dict[str, object]] = []
+        hospital_table_rows: list[dict[str, object]] = []
         if hospitals_path.exists():
             try:
                 hospitals_df = pd.read_csv(hospitals_path, low_memory=False)
@@ -460,25 +598,44 @@ class CcaaDetailView:
                     engine="python",
                     on_bad_lines="skip",
                 )
-            if {"CCAA", "lat", "lon"}.issubset(hospitals_df.columns):
-                hospitals_df["lat"] = pd.to_numeric(hospitals_df["lat"], errors="coerce")
-                hospitals_df["lon"] = pd.to_numeric(hospitals_df["lon"], errors="coerce")
-                hospitals_df = hospitals_df.dropna(subset=["CCAA", "lat", "lon"])
-
+            if "CCAA" in hospitals_df.columns:
                 selected_norm = self._norm_text(selected_ccaa)
-                hospitals_df = hospitals_df[
+                ccaa_hospitals_df = hospitals_df[
                     hospitals_df["CCAA"].astype(str).map(self._norm_text) == selected_norm
-                ]
+                ].copy()
 
-                for _, row in hospitals_df.iterrows():
-                    hospital_points.append(
+                # Build hospital list for the target list module.
+                for _, row in ccaa_hospitals_df.iterrows():
+                    beds_value = pd.to_numeric(pd.Series([row.get("CAMAS")]), errors="coerce").iloc[0]
+                    beds = int(beds_value) if pd.notna(beds_value) else 0
+                    hospital_table_rows.append(
                         {
-                            "lat": float(row["lat"]),
-                            "lon": float(row["lon"]),
+                            "id": str(row.get("CCN") or row.get("CODCNH") or row.name),
                             "name": str(row.get("Nombre Centro", "Hospital")),
+                            "beds": beds,
                             "dependency": str(row.get("Dependencia Funcional", "")),
+                            "center_class": str(row.get("Clase de Centro", "")),
+                            "municipio": str(row.get("Municipio", "")),
+                            "provincia": str(row.get("Provincia", "")),
+                            "active": str(row.get("ALTA", "")),
                         }
                     )
+
+                hospital_table_rows = sorted(hospital_table_rows, key=lambda item: int(item.get("beds", 0)), reverse=True)
+
+                if {"lat", "lon"}.issubset(ccaa_hospitals_df.columns):
+                    ccaa_hospitals_df["lat"] = pd.to_numeric(ccaa_hospitals_df["lat"], errors="coerce")
+                    ccaa_hospitals_df["lon"] = pd.to_numeric(ccaa_hospitals_df["lon"], errors="coerce")
+                    map_hospitals_df = ccaa_hospitals_df.dropna(subset=["lat", "lon"])
+                    for _, row in map_hospitals_df.iterrows():
+                        hospital_points.append(
+                            {
+                                "lat": float(row["lat"]),
+                                "lon": float(row["lon"]),
+                                "name": str(row.get("Nombre Centro", "Hospital")),
+                                "dependency": str(row.get("Dependencia Funcional", "")),
+                            }
+                        )
 
         background_map_markup = '<div class="ccaa-map-fallback">Mapa no disponible</div>'
         if map_html_path.exists():
@@ -505,32 +662,22 @@ class CcaaDetailView:
             for name in ccaa_options
         )
 
+        disease_options = [
+            "Obesity",
+            "Diabetes",
+            "Cardiovascular",
+            "Respiratory",
+            "Oncology",
+        ]
+        disease_options_html = "".join(
+            f'<option value="{html_lib.escape(option)}"'
+            + (" selected" if option == "Obesity" else "")
+            + f'>{html_lib.escape(option)}</option>'
+            for option in disease_options
+        )
+
         fallback_flag_url = "https://upload.wikimedia.org/wikipedia/commons/9/9a/Flag_of_Spain.svg"
-        ccaa_flag_by_name = {
-            "Andalucía": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Flag_of_Andaluc%C3%ADa.svg/640px-Flag_of_Andaluc%C3%ADa.svg.png",
-            "Aragón": "https://upload.wikimedia.org/wikipedia/commons/1/18/Flag_of_Aragon.svg",
-            "Ppdo. de Asturias": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Flag_of_Asturias.svg",
-            "Principado de Asturias": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Flag_of_Asturias.svg",
-            "Illes Balears": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Flag_of_the_Balearic_Islands.svg/640px-Flag_of_the_Balearic_Islands.svg.png",
-            "Canarias": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Flag_of_Canary_Islands%2C_version.svg/640px-Flag_of_Canary_Islands%2C_version.svg.png",
-            "Cantabria": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Flag_of_Cantabria.svg/640px-Flag_of_Cantabria.svg.png",
-            "Castilla y León": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Flag_of_Castile_and_Le%C3%B3n.svg/640px-Flag_of_Castile_and_Le%C3%B3n.svg.png",
-            "Castilla-La Mancha": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Flag_of_Castile-La_Mancha.svg/640px-Flag_of_Castile-La_Mancha.svg.png",
-            "Cataluña": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Flag_of_Catalonia.svg",
-            "Comunidad Valenciana": "https://upload.wikimedia.org/wikipedia/commons/1/16/Flag_of_the_Valencian_Community_%282x3%29.svg",
-            "Extremadura": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Flag_Extremadura.svg/640px-Flag_Extremadura.svg.png",
-            "Galicia": "https://upload.wikimedia.org/wikipedia/commons/6/64/Flag_of_Galicia.svg",
-            "Madrid": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Flag_of_the_Community_of_Madrid.svg",
-            "Comunidad de Madrid": "https://upload.wikimedia.org/wikipedia/commons/9/9c/Flag_of_the_Community_of_Madrid.svg",
-            "Región de Murcia": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Flag_of_the_Region_of_Murcia.svg/640px-Flag_of_the_Region_of_Murcia.svg.png",
-            "C. Foral de Navarra": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Bandera_de_Navarra.svg/640px-Bandera_de_Navarra.svg.png",
-            "Comunidad Foral de Navarra": "https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Navarre.svg",
-            "País Vasco": "https://upload.wikimedia.org/wikipedia/commons/2/2d/Flag_of_the_Basque_Country.svg",
-            "La Rioja": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Bandera_Republicana_de_La_Rioja.png/640px-Bandera_Republicana_de_La_Rioja.png",
-            "Ceuta": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Flag_of_Ceuta.svg",
-            "Melilla": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Flag_Melilla.svg/640px-Flag_Melilla.svg.png",
-        }
-        ccaa_flag_by_norm = {self._norm_text(name): url for name, url in ccaa_flag_by_name.items()}
+        ccaa_flag_by_norm = self._build_local_flag_map(flags_dir)
         selected_flag_url = ccaa_flag_by_norm.get(self._norm_text(selected_ccaa), fallback_flag_url)
 
         detail_html = f"""
@@ -651,6 +798,43 @@ html, body {{
     font-weight: 600;
     padding: 5px 7px;
     min-width: 178px;
+}}
+.disease-panel {{
+    position: absolute;
+    top: 130px;
+    left: 12px;
+    z-index: 25;
+    min-width: 164px;
+    background: {palette['panel_bg']};
+    border: 1px solid {palette['card_border']};
+    border-radius: 10px;
+    padding: 6px 8px;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.12);
+    backdrop-filter: blur(4px);
+}}
+.disease-panel-label {{
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: {palette['label_color']};
+    font-weight: 700;
+    margin-bottom: 4px;
+}}
+.disease-panel select {{
+    width: 100%;
+    border: 1px solid {palette['surface_border']};
+    border-radius: 8px;
+    background: {palette['surface_bg']};
+    color: {palette['surface_text']};
+    font-size: 0.86rem;
+    font-weight: 600;
+    padding: 4px 6px;
+    outline: none;
+}}
+.disease-panel-note {{
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: {palette['muted_text']};
 }}
 .ccaa-title-box {{
     padding: 8px 12px;
@@ -779,15 +963,45 @@ html, body {{
     display: grid;
     grid-template-columns: 1.02fr 0.9fr 1.18fr;
     gap: 10px;
+    align-items: start;
 }}
 .ccaa-grid-spacer {{
-    pointer-events: none;
+    pointer-events: auto;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+}}
+.ccaa-side-info {{
+    width: min(100%, 360px);
+    border: 1px solid {palette['card_border']};
+    border-radius: 12px;
+    padding: 8px 8px 5px 8px;
+    box-sizing: border-box;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+    background: color-mix(in srgb, {palette['panel_soft_bg']} 88%, transparent);
+    align-self: flex-start;
+    height: fit-content;
+}}
+.ccaa-side-info-title {{
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: {palette['label_color']};
+    font-weight: 700;
+    margin-bottom: 8px;
+}}
+.ccaa-side-info,
+.ccaa-card-consumo {{
+    margin-top: 128px;
 }}
 .ccaa-card {{
     border: 1px solid {palette['card_border']};
     border-radius: 12px;
     padding: 10px;
-    min-height: 270px;
+    min-height: 228px;
+    height: fit-content;
+    align-self: start;
     box-sizing: border-box;
     backdrop-filter: blur(6px);
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
@@ -846,14 +1060,26 @@ html, body {{
     padding-bottom: 4px;
 }}
 .ccaa-chart-wrap {{
-    height: 190px;
+    height: 220px;
     display: flex;
     align-items: flex-end;
     gap: 8px;
     border: 1px solid {palette['card_border']};
     border-radius: 10px;
-    padding: 10px 8px;
-    background: linear-gradient(180deg, {palette['panel_bg']} 0%, {palette['panel_soft_bg']} 100%);
+    padding: 8px 8px 6px 8px;
+    background:
+        repeating-linear-gradient(
+            to top,
+            rgba(100, 116, 139, 0.16) 0,
+            rgba(100, 116, 139, 0.16) 1px,
+            transparent 1px,
+            transparent 34px
+        ),
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, {palette['panel_bg']} 84%, transparent) 0%,
+            color-mix(in srgb, {palette['panel_soft_bg']} 84%, transparent) 100%
+        );
 }}
 .ccaa-bar-wrap {{
     flex: 1;
@@ -861,21 +1087,114 @@ html, body {{
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: 4px;
     height: 100%;
 }}
 .ccaa-bar {{
     width: 100%;
-    max-width: 36px;
+    max-width: 28px;
     border-radius: 6px 6px 3px 3px;
     border: 1px solid {palette['accent_soft']};
     background: linear-gradient(180deg, {palette['accent']}66 0%, {palette['accent']} 100%);
     min-height: 8px;
 }}
+.ccaa-bar.high {{
+    border-color: #d97706;
+    background: linear-gradient(180deg, rgba(255, 226, 164, 0.78) 0%, rgba(217, 119, 6, 0.9) 100%);
+}}
+.ccaa-bar.low {{
+    border-color: #0369a1;
+    background: linear-gradient(180deg, rgba(186, 230, 253, 0.78) 0%, rgba(3, 105, 161, 0.9) 100%);
+}}
+.ccaa-bar.neutral {{
+    border-color: #64748b;
+    background: linear-gradient(180deg, rgba(203, 213, 225, 0.75) 0%, rgba(100, 116, 139, 0.9) 100%);
+}}
+.ccaa-bar.ccaa-bar-peak {{
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.38), 0 0 12px rgba(22, 163, 74, 0.28);
+}}
+.ccaa-bar-status {{
+    min-height: 14px;
+    font-size: 0.6rem;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 999px;
+    border: 1px solid {palette['card_border']};
+    background: {palette['surface_bg']};
+    color: {palette['label_color']};
+    white-space: nowrap;
+}}
+.ccaa-bar-value {{
+    font-size: 0.63rem;
+    font-weight: 700;
+    line-height: 1;
+}}
+.ccaa-bar-value.high {{
+    color: #9a3412;
+}}
+.ccaa-bar-value.low {{
+    color: #075985;
+}}
+.ccaa-bar-value.neutral {{
+    color: #475569;
+}}
+.ccaa-bar-value.peak {{
+    color: #166534;
+}}
+.ccaa-bar-status.high {{
+    color: #7c2d12;
+    border-color: #d97706;
+    background: rgba(255, 247, 237, 0.92);
+}}
+.ccaa-bar-status.low {{
+    color: #0c4a6e;
+    border-color: #0369a1;
+    background: rgba(239, 246, 255, 0.92);
+}}
+.ccaa-bar-status.neutral {{
+    color: #334155;
+    border-color: #64748b;
+    background: rgba(241, 245, 249, 0.92);
+}}
+.ccaa-bar-status.ccaa-bar-peak {{
+    border-color: #16a34a;
+    background: rgba(240, 253, 244, 0.92);
+    color: #166534;
+    font-weight: 700;
+}}
 .ccaa-bar-label {{
     font-size: 0.72rem;
     color: {palette['label_color']};
     font-weight: 700;
+}}
+.ccaa-bar-ref {{
+    font-size: 0.58rem;
+    font-weight: 700;
+    line-height: 1;
+    opacity: 0.85;
+}}
+.ccaa-bar-ref.high {{
+    color: #b45309;
+}}
+.ccaa-bar-ref.low {{
+    color: #0369a1;
+}}
+.ccaa-bar-ref.neutral {{
+    color: #64748b;
+}}
+.ccaa-bar-label.high {{
+    color: #9a3412;
+}}
+.ccaa-bar-label.low {{
+    color: #075985;
+}}
+.ccaa-bar-label.neutral {{
+    color: #475569;
+}}
+.ccaa-bar-label.peak {{
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-weight: 800;
 }}
 .ccaa-chart-empty {{
     width: 100%;
@@ -883,52 +1202,210 @@ html, body {{
     color: {palette['muted_text']};
     font-size: 0.9rem;
 }}
-.ccaa-actions {{
-    margin-top: 12px;
+.ccaa-chart-legend {{
+    margin-top: 2px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px 8px;
 }}
-.ccaa-target-btn {{
-    width: 100%;
+.ccaa-legend-item {{
     display: inline-flex;
-    justify-content: center;
-    text-decoration: none !important;
-    color: {palette['surface_text']} !important;
-    background: {palette['surface_bg']};
+    align-items: center;
+    gap: 5px;
+    font-size: 0.63rem;
+    color: {palette['label_color']};
+    font-weight: 600;
+    white-space: nowrap;
+}}
+.ccaa-legend-dot {{
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
     border: 1px solid {palette['surface_border']};
-    border-radius: 10px;
-    padding: 9px 10px;
-    font-size: 0.86rem;
+    flex: 0 0 auto;
+}}
+.ccaa-legend-dot.high {{
+    background: #d97706;
+    border-color: #d97706;
+}}
+.ccaa-legend-dot.neutral {{
+    background: #64748b;
+    border-color: #64748b;
+}}
+.ccaa-legend-dot.low {{
+    background: #0369a1;
+    border-color: #0369a1;
+}}
+.ccaa-legend-dot.peak {{
+    background: #16a34a;
+    border-color: #16a34a;
+}}
+.ccaa-chart-summary {{
+    margin-top: 4px;
+    border: 1px solid {palette['card_border']};
+    border-radius: 8px;
+    padding: 5px 6px;
+    background: color-mix(in srgb, {palette['panel_bg']} 86%, transparent);
+}}
+.ccaa-summary-grid {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}}
+.ccaa-summary-item span {{
+    display: block;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: {palette['label_color']};
     font-weight: 700;
 }}
-.ccaa-compare-table {{
+.ccaa-summary-item strong {{
+    display: block;
+    margin-top: 2px;
+    font-size: 0.8rem;
+    color: {palette['title_color']};
+}}
+.ccaa-summary-note {{
+    margin-top: 5px;
+    font-size: 0.68rem;
+    color: {palette['text_color']};
+    line-height: 1.35;
+}}
+.ccaa-inline-kpis {{
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}}
+.ccaa-kpi-pill {{
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid {palette['card_border']};
+    padding: 2px 7px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1.2;
+    background: rgba(248, 250, 252, 0.8);
+    color: #334155;
+}}
+.ccaa-kpi-pill.up {{
+    border-color: #15803d;
+    color: #166534;
+    background: rgba(240, 253, 244, 0.9);
+}}
+.ccaa-kpi-pill.down {{
+    border-color: #b91c1c;
+    color: #991b1b;
+    background: rgba(254, 242, 242, 0.9);
+}}
+.ccaa-kpi-pill.flat {{
+    border-color: #64748b;
+    color: #475569;
+    background: rgba(241, 245, 249, 0.9);
+}}
+.ccaa-hospital-toolbar {{
+    display: grid;
+    grid-template-columns: 1.25fr 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 8px;
+}}
+.ccaa-hospital-toolbar input,
+.ccaa-hospital-toolbar select {{
+    width: 100%;
+    border: 1px solid {palette['surface_border']};
+    border-radius: 7px;
+    background: color-mix(in srgb, {palette['surface_bg']} 86%, transparent);
+    color: {palette['surface_text']};
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 5px 6px;
+}}
+.ccaa-hospital-table-wrap {{
+    border: 1px solid {palette['card_border']};
+    border-radius: 10px;
+    overflow: hidden;
+}}
+.ccaa-hospital-table-scroll {{
+    max-height: 270px;
+    overflow: auto;
+}}
+.ccaa-hospital-table {{
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.8rem;
+    font-size: 0.73rem;
 }}
-.ccaa-compare-table th,
-.ccaa-compare-table td {{
+.ccaa-hospital-table th,
+.ccaa-hospital-table td {{
     border: 1px solid {palette['card_border']};
-    padding: 7px 8px;
+    padding: 6px 6px;
     text-align: left;
     color: {palette['text_color']};
+    vertical-align: top;
 }}
-.ccaa-compare-table th {{
+.ccaa-hospital-table th {{
+    position: sticky;
+    top: 0;
     background: {palette['surface_bg']};
-    font-size: 0.76rem;
+    font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: {palette['label_color']};
 }}
-.status {{
-    text-align: center !important;
-    font-weight: 800;
+.ccaa-hospital-name {{
+    font-weight: 700;
+    color: {palette['title_color']};
 }}
-.status.good {{
-    color: #16a34a;
+.ccaa-hospital-sub {{
+    margin-top: 2px;
+    font-size: 0.66rem;
+    color: {palette['muted_text']};
 }}
-.status.bad {{
-    color: #dc2626;
+.ccaa-add-btn {{
+    border: 1px solid {palette['accent_soft']};
+    background: color-mix(in srgb, {palette['surface_bg']} 88%, transparent);
+    color: {palette['accent']};
+    border-radius: 6px;
+    padding: 3px 7px;
+    font-size: 0.67rem;
+    font-weight: 700;
+    cursor: pointer;
 }}
-.status.neutral {{
+.ccaa-add-btn:hover {{
+    filter: brightness(1.05);
+}}
+.ccaa-target-mini {{
+    margin-top: 8px;
+    border: 1px solid {palette['card_border']};
+    border-radius: 9px;
+    padding: 6px;
+    background: color-mix(in srgb, {palette['panel_bg']} 84%, transparent);
+}}
+.ccaa-target-mini-title {{
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: {palette['label_color']};
+    font-weight: 700;
+}}
+.ccaa-target-mini-list {{
+    margin-top: 5px;
+    display: grid;
+    gap: 4px;
+    max-height: 88px;
+    overflow: auto;
+}}
+.ccaa-target-mini-item {{
+    font-size: 0.68rem;
+    border: 1px solid {palette['card_border']};
+    border-radius: 6px;
+    padding: 3px 5px;
+    background: color-mix(in srgb, {palette['surface_bg']} 85%, transparent);
+}}
+.ccaa-target-mini-empty {{
+    margin-top: 4px;
+    font-size: 0.68rem;
     color: {palette['muted_text']};
 }}
 @media (max-width: 1200px) {{
@@ -991,6 +1468,11 @@ html, body {{
                     id="ccaa_overview_btn"
                     data-overview-href="{html_lib.escape(overview_href, quote=True)}"
                 >Volver</a>
+                <a
+                    href="{html_lib.escape(target_href, quote=True)}"
+                    target="_top"
+                    class="ccaa-detail-top-btn"
+                >Target List</a>
                 <div class="ccaa-select-wrap">
                     <label for="ccaa_detail_select">CCAA</label>
                     <button
@@ -1011,6 +1493,14 @@ html, body {{
                     </select>
                 </div>
             </div>
+        </div>
+
+        <div class="disease-panel ccaa-floating">
+            <div class="disease-panel-label">Disease</div>
+            <select aria-label="Disease selector">
+                {disease_options_html}
+            </select>
+            <div class="disease-panel-note">Ready to connect disease-specific layers.</div>
         </div>
 
         <div class="ccaa-kpi-compare-strip ccaa-floating">
@@ -1051,38 +1541,63 @@ html, body {{
                 <div class="value">19</div>
             </div>
             <div class="ccaa-chip ccaa-floating">
-                <div class="label">Hosp CV</div>
+                <div class="label">HOSP TOTALES</div>
                 <div class="value">{self._fmt(selected_row.get('hospitals_total'), decimals=0)}</div>
             </div>
         </div>
 
         <div class="ccaa-detail-grid">
-            <div class="ccaa-grid-spacer"></div>
-            <div class="ccaa-card">
+            <div class="ccaa-grid-spacer">
+                <div class="ccaa-side-info">
+                    <div class="ccaa-side-info-title">Lectura rapida consumo</div>
+                    {chart_legend_html}
+                    {chart_summary_html}
+                </div>
+            </div>
+            <div class="ccaa-card ccaa-card-consumo">
                 <div class="ccaa-card-title">Consumo de medicacion (EUR/cap)</div>
                 <div class="ccaa-chart-wrap">
                     {bars_html}
                 </div>
-                <div class="ccaa-actions">
-                    <a href="{html_lib.escape(market_href, quote=True)}" target="_top" class="ccaa-target-btn">Go To Targetlist</a>
-                </div>
             </div>
 
             <div class="ccaa-card">
-                <div class="ccaa-card-title">Variables: {html_lib.escape(selected_ccaa)} vs Comunidad Valenciana</div>
-                <table class="ccaa-compare-table">
-                    <thead>
-                        <tr>
-                            <th>Variable</th>
-                            <th>{html_lib.escape(selected_ccaa)}</th>
-                            <th>C. Valenciana</th>
-                            <th>Target</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {''.join(metric_rows)}
-                    </tbody>
-                </table>
+                <div class="ccaa-card-title">Target List Hospitales: {html_lib.escape(selected_ccaa)}</div>
+                <div class="ccaa-hospital-toolbar">
+                    <input id="hospital_search" type="text" placeholder="Buscar hospital o municipio" />
+                    <select id="hospital_dependency_filter">
+                        <option value="all">Dependencia: todas</option>
+                    </select>
+                    <select id="hospital_sort">
+                        <option value="beds_desc">Camas: mayor a menor</option>
+                        <option value="beds_asc">Camas: menor a mayor</option>
+                        <option value="name_asc">Nombre A-Z</option>
+                        <option value="dependency_asc">Dependencia</option>
+                    </select>
+                </div>
+
+                <div class="ccaa-hospital-table-wrap">
+                    <div class="ccaa-hospital-table-scroll">
+                        <table class="ccaa-hospital-table">
+                            <thead>
+                                <tr>
+                                    <th>Hospital</th>
+                                    <th>Camas</th>
+                                    <th>Dependencia</th>
+                                    <th>Clase</th>
+                                    <th>Accion</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hospital_table_body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="ccaa-target-mini">
+                    <div class="ccaa-target-mini-title">Mi target list (<span id="target_list_count">0</span>)</div>
+                    <div class="ccaa-target-mini-list" id="target_list_container"></div>
+                    <div class="ccaa-target-mini-empty" id="target_list_empty">Todavia no has anadido hospitales.</div>
+                </div>
             </div>
         </div>
     </div>
@@ -1096,6 +1611,7 @@ html, body {{
     const compareStrip = document.querySelector(".ccaa-kpi-compare-strip");
     const ccaaFlagByNorm = {json.dumps(ccaa_flag_by_norm)};
     const fallbackFlagSrc = {json.dumps(fallback_flag_url)};
+    const hospitalRows = {json.dumps(hospital_table_rows, ensure_ascii=False)};
     if (!selector) return;
 
     const setCompareCompact = (isCompact) => {{
@@ -1168,6 +1684,118 @@ html, body {{
             navigateTop(overviewHref);
         }});
     }}
+
+    const hospitalSearch = document.getElementById("hospital_search");
+    const dependencyFilter = document.getElementById("hospital_dependency_filter");
+    const hospitalSort = document.getElementById("hospital_sort");
+    const hospitalTableBody = document.getElementById("hospital_table_body");
+    const targetListContainer = document.getElementById("target_list_container");
+    const targetListCount = document.getElementById("target_list_count");
+    const targetListEmpty = document.getElementById("target_list_empty");
+    const targetList = [];
+
+    const escapeHtml = (value) => String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const toNumber = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+
+    const updateDependencyOptions = () => {{
+        if (!dependencyFilter) return;
+        const values = Array.from(new Set(hospitalRows
+            .map((item) => String(item.dependency || "").trim())
+            .filter((item) => item.length > 0)))
+            .sort((a, b) => a.localeCompare(b, "es", {{ sensitivity: "base" }}));
+
+        dependencyFilter.innerHTML = '<option value="all">Dependencia: todas</option>'
+            + values.map((value) => `<option value="${{escapeHtml(value)}}">${{escapeHtml(value)}}</option>`).join("");
+    }};
+
+    const renderTargetList = () => {{
+        if (!targetListContainer || !targetListCount || !targetListEmpty) return;
+        targetListCount.textContent = String(targetList.length);
+        if (!targetList.length) {{
+            targetListContainer.innerHTML = "";
+            targetListEmpty.style.display = "block";
+            return;
+        }}
+
+        targetListEmpty.style.display = "none";
+        targetListContainer.innerHTML = targetList.map((item) => (
+            `<div class="ccaa-target-mini-item">${{escapeHtml(item.name)}} · ${{toNumber(item.beds)}} camas</div>`
+        )).join("");
+    }};
+
+    const addToTargetList = (hospitalId) => {{
+        const id = String(hospitalId || "");
+        const match = hospitalRows.find((row) => String(row.id) === id);
+        if (!match) return;
+        const exists = targetList.some((item) => String(item.id) === id);
+        if (exists) return;
+        targetList.push(match);
+        renderTargetList();
+    }};
+
+    const buildHospitalRows = () => {{
+        const searchValue = normalizeCcaa(hospitalSearch ? hospitalSearch.value : "");
+        const dependencyValue = dependencyFilter ? dependencyFilter.value : "all";
+        const sortMode = hospitalSort ? hospitalSort.value : "beds_desc";
+
+        let rows = hospitalRows.filter((item) => {{
+            if (dependencyValue && dependencyValue !== "all" && String(item.dependency || "") !== dependencyValue) return false;
+            if (!searchValue) return true;
+            const haystack = normalizeCcaa(`${{item.name || ""}} ${{item.municipio || ""}} ${{item.provincia || ""}}`);
+            return haystack.includes(searchValue);
+        }});
+
+        rows = rows.sort((a, b) => {{
+            if (sortMode === "beds_asc") return toNumber(a.beds) - toNumber(b.beds);
+            if (sortMode === "name_asc") return String(a.name || "").localeCompare(String(b.name || ""), "es", {{ sensitivity: "base" }});
+            if (sortMode === "dependency_asc") return String(a.dependency || "").localeCompare(String(b.dependency || ""), "es", {{ sensitivity: "base" }});
+            return toNumber(b.beds) - toNumber(a.beds);
+        }});
+
+        return rows.slice(0, 150);
+    }};
+
+    const renderHospitalTable = () => {{
+        if (!hospitalTableBody) return;
+        const rows = buildHospitalRows();
+        if (!rows.length) {{
+            hospitalTableBody.innerHTML = '<tr><td colspan="5">No hay hospitales para los filtros seleccionados.</td></tr>';
+            return;
+        }}
+
+        hospitalTableBody.innerHTML = rows.map((item) => (
+            `<tr>
+                <td>
+                    <div class="ccaa-hospital-name">${{escapeHtml(item.name)}}</div>
+                    <div class="ccaa-hospital-sub">${{escapeHtml(item.municipio)}} · ${{escapeHtml(item.provincia)}}</div>
+                </td>
+                <td>${{toNumber(item.beds)}}</td>
+                <td>${{escapeHtml(item.dependency)}}</td>
+                <td>${{escapeHtml(item.center_class)}}</td>
+                <td><button class="ccaa-add-btn" data-hospital-id="${{escapeHtml(item.id)}}">Anadir</button></td>
+            </tr>`
+        )).join("");
+
+        hospitalTableBody.querySelectorAll(".ccaa-add-btn").forEach((button) => {{
+            button.addEventListener("click", () => addToTargetList(button.dataset.hospitalId));
+        }});
+    }};
+
+    updateDependencyOptions();
+    renderHospitalTable();
+    renderTargetList();
+
+    [hospitalSearch, dependencyFilter, hospitalSort].forEach((node) => {{
+        if (!node) return;
+        node.addEventListener("input", renderHospitalTable);
+        node.addEventListener("change", renderHospitalTable);
+    }});
 
     setCompareCompact(false);
 }})();
