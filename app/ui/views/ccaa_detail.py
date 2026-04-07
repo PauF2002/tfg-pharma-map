@@ -425,7 +425,7 @@ class CcaaDetailView:
         selected_ccaa = selected_qp
 
         overview_href = build_view_href("overview_map")
-        target_href = build_view_href("market_state", {"ccaa": selected_ccaa})
+        target_href = build_view_href("opportunity_pack", {"ccaa": selected_ccaa})
         detail_base_href = build_view_href("ccaa_detail")
 
         selected_row = score_df[score_df["CCAA"] == selected_ccaa]
@@ -583,6 +583,7 @@ class CcaaDetailView:
         kpi_delta = selected_kpi - spain_kpi_avg if pd.notna(selected_kpi) and pd.notna(spain_kpi_avg) else float("nan")
         kpi_delta_sign = "+" if pd.notna(kpi_delta) and kpi_delta >= 0 else ""
         kpi_delta_class = "good" if pd.notna(kpi_delta) and kpi_delta >= 0 else "bad"
+        kpi_label_class = "good" if pd.notna(kpi_delta) and kpi_delta >= 0 else "bad"
 
         score_name_to_code = self._build_score_name_to_code_map(score_df, boundaries_path)
         selected_code = score_name_to_code.get(selected_ccaa, "")
@@ -899,6 +900,7 @@ html, body {{
 .ccaa-kpi-compare-title {{
     display: inline-flex;
     align-items: center;
+    gap: 4px;
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.07em;
@@ -909,6 +911,12 @@ html, body {{
     border-radius: 999px;
     border: 1px solid {palette['accent_soft']};
     background: {palette['surface_bg']};
+}}
+.ccaa-kpi-word.good {{
+    color: #16a34a;
+}}
+.ccaa-kpi-word.bad {{
+    color: #dc2626;
 }}
 .ccaa-kpi-compare-grid {{
     display: grid;
@@ -1328,7 +1336,7 @@ html, body {{
     overflow: hidden;
 }}
 .ccaa-hospital-table-scroll {{
-    max-height: 270px;
+    max-height: 313px;
     overflow: auto;
 }}
 .ccaa-hospital-table {{
@@ -1375,38 +1383,98 @@ html, body {{
 .ccaa-add-btn:hover {{
     filter: brightness(1.05);
 }}
-.ccaa-target-mini {{
-    margin-top: 8px;
-    border: 1px solid {palette['card_border']};
-    border-radius: 9px;
-    padding: 6px;
-    background: color-mix(in srgb, {palette['panel_bg']} 84%, transparent);
+.ccaa-hospital-row.selected {{
+    background: rgba(22, 163, 74, 0.07);
 }}
-.ccaa-target-mini-title {{
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: {palette['label_color']};
-    font-weight: 700;
+.ccaa-hospital-row {{
+    cursor: pointer;
 }}
-.ccaa-target-mini-list {{
-    margin-top: 5px;
-    display: grid;
+.ccaa-hospital-row.active {{
+    background: rgba(59, 130, 246, 0.08);
+    outline: 1px solid rgba(59, 130, 246, 0.35);
+    outline-offset: -1px;
+}}
+.ccaa-add-btn.remove {{
+    border-color: #dc2626;
+    color: #dc2626;
+}}
+.ccaa-cart-badge {{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    border: 1px solid {palette['accent_soft']};
+    background: {palette['surface_bg']};
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+    margin-left: auto;
+}}
+.ccaa-card-header {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}}
+.ccaa-cart-icon-btn,
+.ccaa-cart-action-btn {{
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: {palette['surface_text']};
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+}}
+.ccaa-cart-icon-btn {{
+    font-size: 1.05rem;
+    line-height: 1;
+}}
+.ccaa-cart-count {{
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #16a34a;
+    color: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 800;
+}}
+.ccaa-cart-actions {{
+    display: inline-flex;
+    align-items: center;
     gap: 4px;
-    max-height: 88px;
-    overflow: auto;
 }}
-.ccaa-target-mini-item {{
-    font-size: 0.68rem;
-    border: 1px solid {palette['card_border']};
-    border-radius: 6px;
-    padding: 3px 5px;
-    background: color-mix(in srgb, {palette['surface_bg']} 85%, transparent);
+.ccaa-cart-action-btn {{
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.12);
+    color: {palette['label_color']};
+    font-size: 0.82rem;
+    font-weight: 800;
+    line-height: 1;
 }}
-.ccaa-target-mini-empty {{
-    margin-top: 4px;
+.ccaa-cart-link-btn {{
+    text-decoration: none !important;
+    color: {palette['surface_text']} !important;
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid {palette['surface_border']};
+    border-radius: 999px;
+    padding: 3px 8px;
     font-size: 0.68rem;
-    color: {palette['muted_text']};
+    font-weight: 700;
+    line-height: 1.2;
+}}
+.ccaa-cart-action-btn:hover,
+.ccaa-cart-icon-btn:hover {{
+    filter: brightness(1.06);
+}}
+.ccaa-cart-link-btn:hover {{
+    filter: brightness(1.06);
 }}
 @media (max-width: 1200px) {{
     .ccaa-overlay-top {{
@@ -1468,11 +1536,6 @@ html, body {{
                     id="ccaa_overview_btn"
                     data-overview-href="{html_lib.escape(overview_href, quote=True)}"
                 >Volver</a>
-                <a
-                    href="{html_lib.escape(target_href, quote=True)}"
-                    target="_top"
-                    class="ccaa-detail-top-btn"
-                >Target List</a>
                 <div class="ccaa-select-wrap">
                     <label for="ccaa_detail_select">CCAA</label>
                     <button
@@ -1497,14 +1560,18 @@ html, body {{
 
         <div class="disease-panel ccaa-floating">
             <div class="disease-panel-label">Disease</div>
-            <select aria-label="Disease selector">
+            <select id="disease_selector" aria-label="Disease selector">
                 {disease_options_html}
             </select>
             <div class="disease-panel-note">Ready to connect disease-specific layers.</div>
         </div>
 
         <div class="ccaa-kpi-compare-strip ccaa-floating">
-            <div class="ccaa-kpi-compare-title">Comparacion KPI oportunidad</div>
+            <div class="ccaa-kpi-compare-title">
+                <span>Comparación</span>
+                <span class="ccaa-kpi-word {kpi_label_class}">KPI</span>
+                <span>Oportunidad</span>
+            </div>
             <div class="ccaa-kpi-compare-grid">
                 <div class="ccaa-kpi-compare-item">
                     <div class="label">
@@ -1561,8 +1628,18 @@ html, body {{
                 </div>
             </div>
 
-            <div class="ccaa-card">
-                <div class="ccaa-card-title">Target List Hospitales: {html_lib.escape(selected_ccaa)}</div>
+            <div class="ccaa-card" id="target_list_section">
+                <div class="ccaa-card-header">
+                    <div class="ccaa-card-title">Target List Hospitales: {html_lib.escape(selected_ccaa)}</div>
+                    <div class="ccaa-cart-badge" title="Abrir target list">
+                        <a href="{html_lib.escape(target_href, quote=True)}" target="_top" class="ccaa-cart-link-btn" id="target_list_open" data-base-href="{html_lib.escape(target_href, quote=True)}">Target List</a>
+                        <button class="ccaa-cart-icon-btn" id="target_cart_open" type="button" aria-label="Abrir target list">🏥</button>
+                        <span class="ccaa-cart-count" id="target_cart_count">0</span>
+                        <div class="ccaa-cart-actions">
+                            <button class="ccaa-cart-action-btn" id="target_cart_collapse" type="button" aria-label="Quitar hospital seleccionado">-</button>
+                        </div>
+                    </div>
+                </div>
                 <div class="ccaa-hospital-toolbar">
                     <input id="hospital_search" type="text" placeholder="Buscar hospital o municipio" />
                     <select id="hospital_dependency_filter">
@@ -1592,12 +1669,6 @@ html, body {{
                         </table>
                     </div>
                 </div>
-
-                <div class="ccaa-target-mini">
-                    <div class="ccaa-target-mini-title">Mi target list (<span id="target_list_count">0</span>)</div>
-                    <div class="ccaa-target-mini-list" id="target_list_container"></div>
-                    <div class="ccaa-target-mini-empty" id="target_list_empty">Todavia no has anadido hospitales.</div>
-                </div>
             </div>
         </div>
     </div>
@@ -1609,6 +1680,12 @@ html, body {{
     const overviewBtn = document.getElementById("ccaa_overview_btn");
     const flagImg = document.getElementById("ccaa_flag_img");
     const compareStrip = document.querySelector(".ccaa-kpi-compare-strip");
+    const targetCartOpen = document.getElementById("target_cart_open");
+    const targetCartCollapse = document.getElementById("target_cart_collapse");
+    const targetCartCount = document.getElementById("target_cart_count");
+    const targetListOpenLink = document.getElementById("target_list_open");
+    const targetListSection = document.getElementById("target_list_section");
+    const diseaseSelector = document.getElementById("disease_selector");
     const ccaaFlagByNorm = {json.dumps(ccaa_flag_by_norm)};
     const fallbackFlagSrc = {json.dumps(fallback_flag_url)};
     const hospitalRows = {json.dumps(hospital_table_rows, ensure_ascii=False)};
@@ -1640,6 +1717,30 @@ html, body {{
         const query = cleanBase.startsWith("?") ? cleanBase.slice(1) : cleanBase;
         const params = new URLSearchParams(query);
         params.set("ccaa", ccaaName);
+        return `?${{params.toString()}}`;
+    }};
+
+    const buildOpportunityPackUrl = () => {{
+        const baseHref = targetListOpenLink ? targetListOpenLink.dataset.baseHref : "?view=opportunity_pack";
+        const cleanBase = String(baseHref || "?view=opportunity_pack").replace(/&amp;/g, "&");
+        const query = cleanBase.startsWith("?") ? cleanBase.slice(1) : cleanBase;
+        const params = new URLSearchParams(query);
+        params.set("ccaa", selector ? selector.value : "");
+        params.set("disease", diseaseSelector ? diseaseSelector.value : "Obesity");
+        params.set("snapshot_date", new Date().toISOString().slice(0, 10));
+
+        const selectedIds = targetList
+            .map((item) => String(item.id || "").trim())
+            .filter((value) => value.length > 0);
+        if (selectedIds.length) params.set("hospital_ids", selectedIds.join(","));
+        else params.delete("hospital_ids");
+
+        const selectedNames = targetList
+            .map((item) => String(item.name || "").trim())
+            .filter((value) => value.length > 0);
+        if (selectedNames.length) params.set("hospital_names", selectedNames.join("||"));
+        else params.delete("hospital_names");
+
         return `?${{params.toString()}}`;
     }};
 
@@ -1689,10 +1790,9 @@ html, body {{
     const dependencyFilter = document.getElementById("hospital_dependency_filter");
     const hospitalSort = document.getElementById("hospital_sort");
     const hospitalTableBody = document.getElementById("hospital_table_body");
-    const targetListContainer = document.getElementById("target_list_container");
-    const targetListCount = document.getElementById("target_list_count");
-    const targetListEmpty = document.getElementById("target_list_empty");
     const targetList = [];
+    let selectedHospitalId = "";
+    let showOnlyTarget = false;
 
     const escapeHtml = (value) => String(value || "")
         .replace(/&/g, "&amp;")
@@ -1714,19 +1814,20 @@ html, body {{
             + values.map((value) => `<option value="${{escapeHtml(value)}}">${{escapeHtml(value)}}</option>`).join("");
     }};
 
-    const renderTargetList = () => {{
-        if (!targetListContainer || !targetListCount || !targetListEmpty) return;
-        targetListCount.textContent = String(targetList.length);
-        if (!targetList.length) {{
-            targetListContainer.innerHTML = "";
-            targetListEmpty.style.display = "block";
-            return;
-        }}
+    const syncCartCount = () => {{
+        if (targetCartCount) targetCartCount.textContent = String(targetList.length);
+    }};
 
-        targetListEmpty.style.display = "none";
-        targetListContainer.innerHTML = targetList.map((item) => (
-            `<div class="ccaa-target-mini-item">${{escapeHtml(item.name)}} · ${{toNumber(item.beds)}} camas</div>`
-        )).join("");
+    const isInTargetList = (hospitalId) => targetList.some((item) => String(item.id) === String(hospitalId || ""));
+
+    const setSelectedHospital = (hospitalId) => {{
+        selectedHospitalId = String(hospitalId || "");
+        renderHospitalTable();
+    }};
+
+    const getSelectedTargetHospital = () => {{
+        if (!selectedHospitalId) return "";
+        return isInTargetList(selectedHospitalId) ? selectedHospitalId : "";
     }};
 
     const addToTargetList = (hospitalId) => {{
@@ -1736,7 +1837,25 @@ html, body {{
         const exists = targetList.some((item) => String(item.id) === id);
         if (exists) return;
         targetList.push(match);
-        renderTargetList();
+        selectedHospitalId = id;
+        syncCartCount();
+        renderHospitalTable();
+    }};
+
+    const removeFromTargetList = (hospitalId) => {{
+        const id = String(hospitalId || "");
+        const next = targetList.filter((item) => String(item.id) !== id);
+        targetList.length = 0;
+        targetList.push(...next);
+        if (selectedHospitalId === id) selectedHospitalId = "";
+        syncCartCount();
+        renderHospitalTable();
+    }};
+
+    const removeSelectedHospital = () => {{
+        const id = getSelectedTargetHospital();
+        if (!id) return;
+        removeFromTargetList(id);
     }};
 
     const buildHospitalRows = () => {{
@@ -1751,7 +1870,14 @@ html, body {{
             return haystack.includes(searchValue);
         }});
 
+        if (showOnlyTarget) {{
+            rows = rows.filter((item) => isInTargetList(item.id));
+        }}
+
         rows = rows.sort((a, b) => {{
+            const aSelected = isInTargetList(a.id) ? 1 : 0;
+            const bSelected = isInTargetList(b.id) ? 1 : 0;
+            if (aSelected !== bSelected) return bSelected - aSelected;
             if (sortMode === "beds_asc") return toNumber(a.beds) - toNumber(b.beds);
             if (sortMode === "name_asc") return String(a.name || "").localeCompare(String(b.name || ""), "es", {{ sensitivity: "base" }});
             if (sortMode === "dependency_asc") return String(a.dependency || "").localeCompare(String(b.dependency || ""), "es", {{ sensitivity: "base" }});
@@ -1769,8 +1895,13 @@ html, body {{
             return;
         }}
 
-        hospitalTableBody.innerHTML = rows.map((item) => (
-            `<tr>
+        hospitalTableBody.innerHTML = rows.map((item) => {{
+            const selected = isInTargetList(item.id);
+            const isActive = String(item.id) === String(selectedHospitalId || "");
+            const rowClass = ["ccaa-hospital-row", selected ? "selected" : "", isActive ? "active" : ""].filter(Boolean).join(" ");
+            const btnClass = selected ? "ccaa-add-btn remove" : "ccaa-add-btn";
+            const btnLabel = selected ? "Quitar" : "Anadir";
+            return `<tr class="${{rowClass}}" data-hospital-id="${{escapeHtml(item.id)}}">
                 <td>
                     <div class="ccaa-hospital-name">${{escapeHtml(item.name)}}</div>
                     <div class="ccaa-hospital-sub">${{escapeHtml(item.municipio)}} · ${{escapeHtml(item.provincia)}}</div>
@@ -1778,18 +1909,47 @@ html, body {{
                 <td>${{toNumber(item.beds)}}</td>
                 <td>${{escapeHtml(item.dependency)}}</td>
                 <td>${{escapeHtml(item.center_class)}}</td>
-                <td><button class="ccaa-add-btn" data-hospital-id="${{escapeHtml(item.id)}}">Anadir</button></td>
-            </tr>`
-        )).join("");
+                <td><button class="${{btnClass}}" data-hospital-id="${{escapeHtml(item.id)}}">${{btnLabel}}</button></td>
+            </tr>`;
+        }}).join("");
+
+        hospitalTableBody.querySelectorAll("tr[data-hospital-id]").forEach((row) => {{
+            row.addEventListener("click", (event) => {{
+                const target = event.target;
+                if (target && target.closest && target.closest("button")) return;
+                setSelectedHospital(row.dataset.hospitalId || "");
+            }});
+        }});
 
         hospitalTableBody.querySelectorAll(".ccaa-add-btn").forEach((button) => {{
-            button.addEventListener("click", () => addToTargetList(button.dataset.hospitalId));
+            button.addEventListener("click", () => {{
+                const id = button.dataset.hospitalId;
+                if (button.classList.contains("remove")) removeFromTargetList(id);
+                else addToTargetList(id);
+            }});
         }});
     }};
 
     updateDependencyOptions();
     renderHospitalTable();
-    renderTargetList();
+    syncCartCount();
+
+    if (targetCartOpen) targetCartOpen.addEventListener("click", () => {{
+        if (targetListSection && typeof targetListSection.scrollIntoView === "function") {{
+            targetListSection.scrollIntoView({{ behavior: "smooth", block: "start" }});
+        }}
+    }});
+    if (targetListOpenLink) {{
+        targetListOpenLink.addEventListener("click", (event) => {{
+            event.preventDefault();
+            navigateTop(buildOpportunityPackUrl());
+        }});
+    }}
+    if (targetCartCollapse) {{
+        targetCartCollapse.addEventListener("click", () => {{
+            removeSelectedHospital();
+        }});
+    }}
 
     [hospitalSearch, dependencyFilter, hospitalSort].forEach((node) => {{
         if (!node) return;

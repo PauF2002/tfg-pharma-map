@@ -221,12 +221,12 @@ class MarketStateView:
 """
             components.html(tradingview_widget, height=tv_embed_height_px, scrolling=False)
 
-            st.markdown("### Target List Hospitales")
             hospitals_df = self._load_hospital_df()
 
             if hospitals_df.empty:
-                st.warning("No se pudo cargar el listado de hospitales.")
                 return
+            
+            st.markdown("### Target List Hospitales")
 
             qp_ccaa = st.query_params.get("ccaa")
             if isinstance(qp_ccaa, list):
@@ -321,7 +321,7 @@ class MarketStateView:
                 table_df,
                 hide_index=True,
                 use_container_width=True,
-                height=520,
+                height=700,
                 key=f"target_editor_{self._norm_text(selected_ccaa)}",
                 column_config={
                     "Anadir": st.column_config.CheckboxColumn("Anadir", help="Marcar para agregar al target list"),
@@ -330,11 +330,11 @@ class MarketStateView:
             )
 
             selected_rows = edited_df[edited_df["Anadir"] == True].copy()  # noqa: E712
-            btn_left, btn_mid, btn_right = st.columns([1.2, 1.2, 3.6])
+            btn_left, btn_right = st.columns([1.5, 2.5])
             with btn_left:
-                add_clicked = st.button("Anadir seleccionados", type="primary", use_container_width=True)
-            with btn_mid:
-                clear_clicked = st.button("Limpiar target", use_container_width=True)
+                add_clicked = st.button("✅ Añadir seleccionados", type="primary", use_container_width=True)
+            with btn_right:
+                clear_clicked = st.button("🔄 Limpiar target", use_container_width=True)
 
             if add_clicked:
                 payload = selected_rows.to_dict("records")

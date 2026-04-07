@@ -1055,6 +1055,117 @@ section[data-testid="stSidebar"] {
         grid-template-columns: 1fr;
     }
 }
+
+/* Tablas transparentes */
+[data-testid="stDataFrame"] {
+    background: transparent !important;
+}
+
+[data-testid="stDataFrame"] table {
+    background: transparent !important;
+}
+
+[data-testid="stDataFrame"] tbody tr {
+    background: transparent !important;
+}
+
+[data-testid="stDataFrame"] tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02) !important;
+}
+
+[data-testid="stDataFrame"] thead tr {
+    background: transparent !important;
+}
+
+[data-testid="stDataFrame"] thead th {
+    background: transparent !important;
+}
+
+[data-testid="stDataFrame"] td,
+[data-testid="stDataFrame"] th {
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Data Editor transparente */
+[data-testid="stDataEditor"] {
+    background: transparent !important;
+}
+
+[data-testid="stDataEditor"] > div {
+    background: transparent !important;
+}
+
+[data-testid="stDataEditor"] table {
+    background: transparent !important;
+}
+
+[data-testid="stDataEditor"] tbody tr {
+    background: transparent !important;
+}
+
+[data-testid="stDataEditor"] tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02) !important;
+}
+
+[data-testid="stDataEditor"] thead tr {
+    background: transparent !important;
+}
+
+[data-testid="stDataEditor"] thead th {
+    background: transparent !important;
+}
+
+[data-testid="stDataEditor"] td,
+[data-testid="stDataEditor"] th {
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Botones vistosos */
+button[data-testid="stBaseButton-primary"] {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    padding: 12px 24px !important;
+    min-height: 48px !important;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4), 0 0 20px rgba(16, 185, 129, 0.6) !important;
+    transition: all 0.3s ease !important;
+    position: relative !important;
+}
+
+button[data-testid="stBaseButton-primary"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 70%);
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+button[data-testid="stBaseButton-primary"]:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 25px rgba(16, 185, 129, 0.6), 0 0 30px rgba(16, 185, 129, 0.8) !important;
+    transform: translateY(-2px) !important;
+}
+
+button[data-testid="stBaseButton-primary"]:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.4), 0 0 15px rgba(16, 185, 129, 0.5) !important;
+}
+
+button[data-testid="stBaseButton-primary"] span,
+button[data-testid="stBaseButton-primary"] p {
+    color: #ffffff !important;
+    position: relative;
+    z-index: 1;
+}
 </style>
         """,
         unsafe_allow_html=True,
@@ -1184,10 +1295,29 @@ html, body, [data-testid="stAppViewContainer"], .stApp {{
     color: {tokens['control_text']} !important;
 }}
 
-.st-key-settings_panel button {{
+.st-key-settings_panel button:not([data-testid="stBaseButton-primary"]) {{
     color: {tokens['control_text']} !important;
     border-color: {tokens['control_border']} !important;
     background: {tokens['control_bg']} !important;
+}}
+
+.st-key-settings_panel button[data-testid="stBaseButton-primary"] {{
+    background: linear-gradient(135deg, {tokens['accent_color']} 0%, {tokens['accent_color']}cc 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px {tokens['accent_color']}55 !important;
+}}
+
+.st-key-settings_panel button[data-testid="stBaseButton-primary"]:hover {{
+    background: linear-gradient(135deg, {tokens['accent_color']}dd 0%, {tokens['accent_color']} 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 22px {tokens['accent_color']}80 !important;
+    transform: translateY(-1px) !important;
+}}
+
+.st-key-settings_panel button[data-testid="stBaseButton-primary"] span,
+.st-key-settings_panel button[data-testid="stBaseButton-primary"] p {{
+    color: #ffffff !important;
 }}
 
 .settings-preview {{
