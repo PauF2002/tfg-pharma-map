@@ -155,6 +155,8 @@ class OverviewMapView:
             ranking_df["KPI"] = ranking_df["KPI"].round(2)
             ranking_df["Beds"] = ranking_df["Beds"].round(2)
             ranking_df["Market"] = ranking_df["Market"].round(2)
+            kpi_min = float(ranking_df["KPI"].min()) if not ranking_df.empty else 0.0
+            kpi_max = float(ranking_df["KPI"].max()) if not ranking_df.empty else 0.0
 
             fallback_flag_url = "https://upload.wikimedia.org/wikipedia/commons/9/9a/Flag_of_Spain.svg"
             ccaa_flag_by_norm = self._build_local_flag_map(flags_dir)
@@ -370,6 +372,54 @@ html, body {{
     font-size: 0.7rem;
     color: {palette['muted_text']};
 }}
+.map-legend-panel {{
+    position: absolute;
+    top: 212px;
+    left: 50px;
+    z-index: 25;
+    width: min(320px, calc(100% - 88px));
+    background: color-mix(in srgb, {palette['panel_bg']} 84%, transparent);
+    border: 1px solid {palette['card_border']};
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.12);
+    backdrop-filter: blur(4px);
+}}
+.map-legend-title {{
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: {palette['label_color']};
+    font-weight: 700;
+    margin-bottom: 8px;
+}}
+.map-legend-scale {{
+    height: 12px;
+    border-radius: 999px;
+    border: 1px solid {palette['surface_border']};
+    background: linear-gradient(90deg, #dbeafe 0%, #93c5fd 45%, #2563eb 100%);
+}}
+.map-legend-range {{
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.72rem;
+    color: {palette['muted_text']};
+    font-weight: 600;
+}}
+.map-legend-note {{
+    margin-top: 8px;
+    font-size: 0.72rem;
+    color: {palette['text_color']};
+    line-height: 1.3;
+}}
+.map-legend-formula {{
+    margin-top: 6px;
+    font-size: 0.7rem;
+    color: {palette['muted_text']};
+    line-height: 1.35;
+}}
 .ranking-panel {{
     position: absolute;
     top: calc(12% + 55px);
@@ -504,6 +554,9 @@ html, body {{
     .kpi-chip {{
         min-width: 108px;
     }}
+    .map-legend-panel {{
+        width: min(290px, calc(100% - 88px));
+    }}
 }}
 </style>
 
@@ -529,6 +582,22 @@ html, body {{
             {disease_options_html}
         </select>
         <div class="disease-panel-note">Ready to connect disease-specific layers.</div>
+    </div>
+
+    <div class="map-legend-panel" role="note" aria-label="KPI legend">
+        <div class="map-legend-title">Legend: Opportunity KPI</div>
+        <div class="map-legend-scale" aria-hidden="true"></div>
+        <div class="map-legend-range">
+            <span>Low ({kpi_min:.2f})</span>
+            <span>High ({kpi_max:.2f})</span>
+        </div>
+        <div class="map-legend-note">
+            Azul más oscuro = mayor oportunidad estimada para la CCAA.
+        </div>
+        <div class="map-legend-formula">
+            KPI = 45% mercado per cápita (12m) + 35% obesidad + 20% camas/100k,
+            tras normalizar cada variable entre 0 y 1 (min-max) y escalar a 0-100.
+        </div>
     </div>
 
     <aside class="ranking-panel">
