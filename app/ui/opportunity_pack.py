@@ -5,6 +5,7 @@ from datetime import date
 from io import BytesIO
 from pathlib import Path
 import unicodedata
+from urllib.request import urlopen
 
 import pandas as pd
 
@@ -27,6 +28,257 @@ def _norm_text(value: object) -> str:
     text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     return " ".join(text.replace("-", " ").split())
+
+
+def _canonical_ccaa_norm(value: object) -> str:
+    base = _norm_text(value)
+    if not base:
+        return ""
+
+    # Remove leading numeric code prefixes from INE labels (e.g. "01 Andalucía").
+    parts = base.split(" ", 1)
+    if parts and parts[0].isdigit() and len(parts) > 1:
+        base = parts[1]
+
+    aliases = {
+        "asturias principado de": "principado de asturias",
+        "balears illes": "illes balears",
+        "castilla la mancha": "castilla-la mancha",
+        "cataluna": "cataluña",
+        "comunitat valenciana": "comunidad valenciana",
+        "madrid comunidad de": "comunidad de madrid",
+        "murcia region de": "region de murcia",
+        "navarra comunidad foral de": "c. foral de navarra",
+        "pais vasco": "país vasco",
+    }
+    return aliases.get(base, base)
+
+
+def _resolve_ccaa_flag_path(project_root: Path, ccaa: str) -> Path | None:
+    flags_dir = project_root / "app" / "assets" / "fotos"
+    local_flag_files = {
+        "andalucia": "Flag_of_Andalucía.svg.png",
+        "aragon": "Flag_of_Aragon.svg",
+        "ppdo. de asturias": "Flag_of_Asturias.svg",
+        "principado de asturias": "Flag_of_Asturias.svg",
+        "illes balears": "Flag_of_the_Balearic_Islands.svg.png",
+        "canarias": "CANARIAS.jpg",
+        "cantabria": "Flag_of_Cantabria.svg.png",
+        "castilla y leon": "Flag_of_Castile_and_León.svg.png",
+        "castilla la mancha": "Flag_of_Castile-La_Mancha.svg.png",
+        "castilla-la mancha": "Flag_of_Castile-La_Mancha.svg.png",
+        "comunidad valenciana": "Flag_of_the_Valencian_Community_(2x3).svg",
+        "extremadura": "Flag_of_Extremadura,_Spain_(with_coat_of_arms).svg.png",
+        "galicia": "Flag_of_Galicia.svg",
+        "madrid": "Flag_of_the_Community_of_Madrid.svg",
+        "comunidad de madrid": "Flag_of_the_Community_of_Madrid.svg",
+        "region de murcia": "Flag_of_the_Region_of_Murcia.svg.png",
+        "c. foral de navarra": "Bandera_de_Navarra.svg.png",
+        "comunidad foral de navarra": "Bandera_de_Navarra.svg.png",
+        "pais vasco": "Flag_of_the_Basque_Country.svg",
+        "la rioja": "Bandera_Republicana_de_La_Rioja.png",
+        "ceuta": "Flag_of_Ceuta.svg",
+        "melilla": "Flag_of_Melilla.svg.png",
+        "cataluna": "Flag_of_Catalonia.svg",
+        "cataluña": "Flag_of_Catalonia.svg",
+    }
+
+    key = _canonical_ccaa_norm(ccaa)
+    filename = local_flag_files.get(key)
+    if not filename:
+        return None
+    path = flags_dir / filename
+    return path if path.exists() else None
+
+
+def _resolve_ccaa_flag_url(ccaa: str) -> str | None:
+    # PNG fallbacks for flags that only exist locally as SVG files.
+    by_ccaa = {
+        "comunidad valenciana": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Flag_of_the_Valencian_Community_%282x3%29.svg/320px-Flag_of_the_Valencian_Community_%282x3%29.svg.png",
+        "aragon": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Flag_of_Aragon.svg/320px-Flag_of_Aragon.svg.png",
+        "principado de asturias": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Flag_of_Asturias.svg/320px-Flag_of_Asturias.svg.png",
+        "galicia": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Flag_of_Galicia.svg/320px-Flag_of_Galicia.svg.png",
+        "comunidad de madrid": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Flag_of_the_Community_of_Madrid.svg/320px-Flag_of_the_Community_of_Madrid.svg.png",
+        "pais vasco": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Flag_of_the_Basque_Country.svg/320px-Flag_of_the_Basque_Country.svg.png",
+        "ceuta": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Flag_of_Ceuta.svg/320px-Flag_of_Ceuta.svg.png",
+        "cataluña": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Flag_of_Catalonia.svg/320px-Flag_of_Catalonia.svg.png",
+    }
+    return by_ccaa.get(_canonical_ccaa_norm(ccaa))
+
+
+def _resolve_disease_image_path(project_root: Path, disease: str) -> Path | None:
+    photos_dir = project_root / "app" / "assets" / "fotos"
+    disease_dir = photos_dir / "diseases"
+    norm = _norm_text(disease).replace(" ", "_")
+
+    candidate_dirs = [photos_dir, disease_dir]
+    candidate_names = [
+        f"disease_{norm}",
+        f"icon_{norm}",
+        f"{norm}_icon",
+        norm,
+    ]
+    extensions = [".png", ".jpg", ".jpeg", ".webp"]
+
+    for folder in candidate_dirs:
+        for base_name in candidate_names:
+            for ext in extensions:
+                path = folder / f"{base_name}{ext}"
+                if path.exists():
+                    return path
+    return None
+
+
+def _insert_sheet_image(
+    sheet,
+    cell: str,
+    image_path: Path,
+    *,
+    x_scale: float,
+    y_scale: float,
+    x_offset: int = 0,
+    y_offset: int = 0,
+) -> bool:
+    if not image_path.exists():
+        return False
+
+    suffix = image_path.suffix.lower()
+    raster_ext = {".png", ".jpg", ".jpeg", ".gif", ".bmp"}
+
+    if suffix in raster_ext:
+        try:
+            image_bytes = image_path.read_bytes()
+        except OSError:
+            return False
+    elif suffix == ".svg":
+        try:
+            import cairosvg  # type: ignore
+
+            image_bytes = cairosvg.svg2png(url=str(image_path))
+        except Exception:
+            return False
+    else:
+        return False
+
+    image_stream = BytesIO(image_bytes)
+    try:
+        sheet.insert_image(
+            cell,
+            image_path.name,
+            {
+                "image_data": image_stream,
+                "x_scale": x_scale,
+                "y_scale": y_scale,
+                "x_offset": x_offset,
+                "y_offset": y_offset,
+                "object_position": 2,
+            },
+        )
+    except ValueError:
+        return False
+    return True
+
+
+def _insert_sheet_image_from_url(
+    sheet,
+    cell: str,
+    image_url: str,
+    *,
+    x_scale: float,
+    y_scale: float,
+    x_offset: int = 0,
+    y_offset: int = 0,
+) -> bool:
+    try:
+        with urlopen(image_url, timeout=6) as response:
+            image_bytes = response.read()
+    except Exception:
+        return False
+
+    if not image_bytes:
+        return False
+
+    try:
+        sheet.insert_image(
+            cell,
+            "remote_flag.png",
+            {
+                "image_data": BytesIO(image_bytes),
+                "x_scale": x_scale,
+                "y_scale": y_scale,
+                "x_offset": x_offset,
+                "y_offset": y_offset,
+                "object_position": 2,
+            },
+        )
+    except ValueError:
+        return False
+    return True
+
+
+def _load_market_trend_for_ccaa(project_root: Path, ccaa: str, max_points: int = 24) -> pd.DataFrame:
+    market_path = project_root / "data" / "processed" / "ccaa_market_monthly.csv"
+    market_df = _safe_read_csv(market_path)
+    if market_df.empty:
+        return pd.DataFrame(columns=["period", "value"])
+
+    market_df["ccaa_norm"] = market_df.get("CCAA", "").map(_canonical_ccaa_norm)
+    selected_norm = _canonical_ccaa_norm(ccaa)
+    scoped = market_df[market_df["ccaa_norm"] == selected_norm].copy()
+    if scoped.empty:
+        return pd.DataFrame(columns=["period", "value"])
+
+    scoped["period"] = scoped.get("year_month", "").astype(str)
+    scoped["value"] = pd.to_numeric(scoped.get("market_monthly_eur_per_capita"), errors="coerce")
+    scoped = scoped.dropna(subset=["value"])
+    scoped = scoped[scoped["period"].str.len() > 0]
+    scoped = scoped.sort_values("period").tail(max_points)
+    return scoped[["period", "value"]].copy()
+
+
+def _load_disease_trend_for_ccaa(project_root: Path, ccaa: str, disease: str) -> pd.DataFrame:
+    disease_norm = _norm_text(disease)
+    obesity_terms = ("obesity", "obesidad")
+
+    if not any(term in disease_norm for term in obesity_terms):
+        return pd.DataFrame(columns=["period", "value"])
+
+    obesity_path = project_root / "data" / "raw" / "ine_obesity_ccaa.csv"
+    obesity_df = _safe_read_csv(obesity_path)
+    if obesity_df.empty:
+        return pd.DataFrame(columns=["period", "value"])
+
+    # Source file is tab-delimited in a single quoted column; split if needed.
+    if obesity_df.shape[1] == 1:
+        col = obesity_df.columns[0]
+        expanded = obesity_df[col].astype(str).str.split("\t", expand=True)
+        expanded.columns = ["Comunidad autónoma", "Masa corporal", "Periodo", "Total"]
+        obesity_df = expanded
+
+    ccaa_col = "Comunidad autónoma" if "Comunidad autónoma" in obesity_df.columns else obesity_df.columns[0]
+    mass_col = "Masa corporal" if "Masa corporal" in obesity_df.columns else obesity_df.columns[1]
+    period_col = "Periodo" if "Periodo" in obesity_df.columns else obesity_df.columns[2]
+    total_col = "Total" if "Total" in obesity_df.columns else obesity_df.columns[3]
+
+    scoped = obesity_df.copy()
+    scoped["ccaa_norm"] = scoped[ccaa_col].map(_canonical_ccaa_norm)
+    scoped["mass_norm"] = scoped[mass_col].map(_norm_text)
+    scoped["period"] = pd.to_numeric(scoped[period_col], errors="coerce")
+    scoped["value"] = pd.to_numeric(scoped[total_col].astype(str).str.replace(",", ".", regex=False), errors="coerce")
+
+    selected_norm = _canonical_ccaa_norm(ccaa)
+    scoped = scoped[
+        (scoped["ccaa_norm"] == selected_norm)
+        & (scoped["mass_norm"].str.contains("obesidad", na=False))
+    ].copy()
+
+    scoped = scoped.dropna(subset=["period", "value"])
+    if scoped.empty:
+        return pd.DataFrame(columns=["period", "value"])
+
+    scoped["period"] = scoped["period"].astype(int).astype(str)
+    scoped = scoped.sort_values("period")
+    return scoped[["period", "value"]].copy()
 
 
 def _normalize_hospital_id(value: object) -> str:
@@ -475,52 +727,566 @@ def prepare_opportunity_pack_data(
 
 def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
     output = BytesIO()
+    project_root = Path(__file__).resolve().parents[2]
 
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         workbook = writer.book
-        fmt_title = workbook.add_format({"bold": True, "font_size": 18, "font_color": "#0f172a"})
+        fmt_title = workbook.add_format({"bold": True, "font_size": 20, "font_color": "#0f172a"})
         fmt_subtitle = workbook.add_format({"bold": True, "font_size": 11, "font_color": "#334155"})
         fmt_label = workbook.add_format({"bold": True, "font_color": "#334155"})
         fmt_value = workbook.add_format({"font_color": "#0f172a"})
         fmt_currency = workbook.add_format({"num_format": "#,##0", "font_color": "#0f172a"})
         fmt_wrap = workbook.add_format({"text_wrap": True, "valign": "top"})
 
+        fmt_header_bar = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 18,
+                "font_color": "#0b1f36",
+                "bg_color": "#eaf2fb",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#d8e5f5",
+            }
+        )
+        fmt_context = workbook.add_format(
+            {
+                "font_size": 10,
+                "font_color": "#334155",
+                "bg_color": "#f8fbff",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#e2e8f0",
+            }
+        )
+        fmt_card_label = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 10,
+                "font_color": "#475569",
+                "bg_color": "#f8fafc",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#dbe4ef",
+            }
+        )
+        fmt_card_value = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 18,
+                "font_color": "#0f172a",
+                "bg_color": "#f8fafc",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#dbe4ef",
+            }
+        )
+        fmt_card_value_currency = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 16,
+                "num_format": "#,##0",
+                "font_color": "#0f172a",
+                "bg_color": "#f8fafc",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#dbe4ef",
+            }
+        )
+        fmt_section = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 11,
+                "font_color": "#0f172a",
+                "bg_color": "#eef4fb",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#d8e5f5",
+            }
+        )
+        fmt_cover_title = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 26,
+                "font_color": "#0b1f36",
+                "align": "left",
+                "valign": "vcenter",
+            }
+        )
+        fmt_cover_subtitle = workbook.add_format(
+            {
+                "font_size": 11,
+                "font_color": "#334155",
+                "align": "left",
+                "valign": "vcenter",
+            }
+        )
+        fmt_cover_kpi_label = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 10,
+                "font_color": "#475569",
+                "bg_color": "#f8fafc",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#dbe4ef",
+            }
+        )
+        fmt_cover_kpi_value = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 20,
+                "font_color": "#0f172a",
+                "bg_color": "#f8fafc",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#dbe4ef",
+            }
+        )
+        fmt_cover_kpi_currency = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 16,
+                "num_format": "#,##0",
+                "font_color": "#0f172a",
+                "bg_color": "#f8fafc",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#dbe4ef",
+            }
+        )
+        fmt_cover_highlight = workbook.add_format(
+            {
+                "bold": True,
+                "font_size": 11,
+                "font_color": "#0f172a",
+                "bg_color": "#edf6ff",
+                "align": "left",
+                "valign": "vcenter",
+                "border": 1,
+                "border_color": "#cfe0f5",
+            }
+        )
+        fmt_cover_story = workbook.add_format(
+            {
+                "font_size": 10,
+                "font_color": "#334155",
+                "bg_color": "#f8fbff",
+                "text_wrap": True,
+                "valign": "top",
+                "border": 1,
+                "border_color": "#d8e5f5",
+            }
+        )
+
         cover = workbook.add_worksheet("Cover")
-        cover.write("A1", "Target List", fmt_title)
-        cover.write("A3", "CCAA", fmt_label)
-        cover.write("B3", str(payload.context.get("ccaa", "N/A")), fmt_value)
-        cover.write("A4", "Disease", fmt_label)
-        cover.write("B4", str(payload.context.get("disease", "N/A")), fmt_value)
-        cover.write("A5", "Snapshot date", fmt_label)
-        cover.write("B5", str(payload.context.get("snapshot_date", "N/A")), fmt_value)
-        cover.write("A6", "Target hospitals", fmt_label)
-        cover.write("B6", int(payload.kpis.get("target_hospitals", 0)), fmt_value)
-        cover.set_column("A:A", 24)
-        cover.set_column("B:B", 44)
+        cover.hide_gridlines(2)
+        cover.set_zoom(94)
+        cover.set_column("A:A", 4)
+        cover.set_column("B:B", 20)
+        cover.set_column("C:C", 16)
+        cover.set_column("D:D", 18)
+        cover.set_column("E:E", 18)
+        cover.set_column("F:F", 18)
+        cover.set_column("G:G", 18)
+        cover.set_column("H:H", 18)
+        cover.set_column("I:I", 18)
+        cover.set_column("J:Z", 14, None, {"hidden": True})
+
+        cover.merge_range("B2:F2", "Target Opportunity Pack", fmt_cover_title)
+        cover.merge_range(
+            "B3:F3",
+            "Investor Snapshot: impacto comercial y foco de ejecución en una sola vista.",
+            fmt_cover_subtitle,
+        )
+
+        context_line = (
+            f"CCAA: {payload.context.get('ccaa', 'N/A')} | "
+            f"Disease: {payload.context.get('disease', 'N/A')} | "
+            f"Snapshot date: {payload.context.get('snapshot_date', 'N/A')}"
+        )
+        cover.merge_range("B5:F5", context_line, fmt_context)
+
+        selected_ccaa = str(payload.context.get("ccaa", ""))
+        selected_disease = str(payload.context.get("disease", ""))
+        ccaa_flag_path = _resolve_ccaa_flag_path(project_root, selected_ccaa)
+        ccaa_flag_url = _resolve_ccaa_flag_url(selected_ccaa)
+        disease_image_path = _resolve_disease_image_path(project_root, selected_disease)
+
+        cover.merge_range("G2:H2", "CCAA flag", fmt_section)
+        cover.write("I2", "Disease", fmt_section)
+
+        inserted_flag = False
+        if ccaa_flag_path is not None:
+            inserted_flag = _insert_sheet_image(
+                cover,
+                "G3",
+                ccaa_flag_path,
+                x_scale=0.45,
+                y_scale=0.45,
+                x_offset=8,
+                y_offset=2,
+            )
+        if (not inserted_flag) and ccaa_flag_url:
+            inserted_flag = _insert_sheet_image_from_url(
+                cover,
+                "G3",
+                ccaa_flag_url,
+                x_scale=0.45,
+                y_scale=0.45,
+                x_offset=8,
+                y_offset=2,
+            )
+        if not inserted_flag:
+            cover.merge_range("G3:H4", f"Flag: {selected_ccaa}", fmt_cover_highlight)
+
+        inserted_disease = False
+        if disease_image_path is not None:
+            inserted_disease = _insert_sheet_image(
+                cover,
+                "I3",
+                disease_image_path,
+                x_scale=0.34,
+                y_scale=0.34,
+                x_offset=4,
+                y_offset=2,
+            )
+        if not inserted_disease:
+            cover.merge_range("I3:I4", f"{selected_disease}", fmt_cover_highlight)
+
+        cover.merge_range("B7:C7", "Target hospitals", fmt_cover_kpi_label)
+        cover.merge_range("D7:E7", "Total beds", fmt_cover_kpi_label)
+        cover.merge_range("F7:G7", "Average score", fmt_cover_kpi_label)
+        cover.merge_range("H7:I7", "Market potential (EUR)", fmt_cover_kpi_label)
+
+        cover.merge_range("B8:C9", int(payload.kpis.get("target_hospitals", 0)), fmt_cover_kpi_value)
+        cover.merge_range("D8:E9", int(payload.kpis.get("total_beds", 0)), fmt_cover_kpi_value)
+        cover.merge_range("F8:G9", round(float(payload.kpis.get("avg_score", 0)), 1), fmt_cover_kpi_value)
+        cover.merge_range("H8:I9", float(payload.kpis.get("market_potential", 0)), fmt_cover_kpi_currency)
+
+        top_hospital = "N/A"
+        if not payload.target_hospitals.empty:
+            top_hospital = str(
+                payload.target_hospitals.sort_values("score", ascending=False).iloc[0].get("hospital", "N/A")
+            )
+
+        cover.merge_range("B11:E11", "Top account recommendation", fmt_section)
+        cover.merge_range("B12:E13", f"Prioritize executive engagement with {top_hospital}.", fmt_cover_highlight)
+        cover.merge_range("F11:I11", "Investment narrative", fmt_section)
+        cover.merge_range("F12:I13", payload.executive_summary, fmt_cover_story)
+
+        target_df_cover = payload.target_hospitals.copy()
+        target_df_cover["dependency"] = target_df_cover.get("dependency", "").fillna("").astype(str)
+
+        def _cover_bucket_hospital_type(value: str) -> str:
+            lower = value.lower()
+            if "privad" in lower:
+                return "Private"
+            if (
+                "public" in lower
+                or "públic" in lower
+                or "servicios e institutos de salud" in lower
+                or "seguridad social" in lower
+                or "autonomica" in lower
+                or "autonómica" in lower
+            ):
+                return "Public"
+            return "Other"
+
+        split_cover = (
+            target_df_cover["dependency"]
+            .map(_cover_bucket_hospital_type)
+            .value_counts()
+            .reindex(["Public", "Private", "Other"], fill_value=0)
+        )
+
+        cover.write("K2", "Type")
+        cover.write("L2", "Hospitals")
+        for row_idx, (label, value) in enumerate(split_cover.items(), start=3):
+            cover.write(f"K{row_idx}", label)
+            cover.write_number(f"L{row_idx}", int(value))
+
+        top_cover_df = payload.top_score_chart.copy().head(5)
+        cover.write("N2", "Hospital")
+        cover.write("O2", "Score")
+        for row_idx, row in enumerate(top_cover_df.itertuples(index=False), start=3):
+            cover.write(f"N{row_idx}", str(getattr(row, "hospital", "")))
+            cover.write_number(f"O{row_idx}", float(getattr(row, "score", 0.0)))
+
+        market_trend_df = _load_market_trend_for_ccaa(project_root, selected_ccaa, max_points=24)
+        cover.write("Q2", "Period")
+        cover.write("R2", "Market per capita")
+        for row_idx, row in enumerate(market_trend_df.itertuples(index=False), start=3):
+            cover.write(f"Q{row_idx}", str(getattr(row, "period", "")))
+            cover.write_number(f"R{row_idx}", float(getattr(row, "value", 0.0)))
+
+        disease_trend_df = _load_disease_trend_for_ccaa(project_root, selected_ccaa, selected_disease)
+        cover.write("T2", "Period")
+        cover.write("U2", "Disease %")
+        for row_idx, row in enumerate(disease_trend_df.itertuples(index=False), start=3):
+            cover.write(f"T{row_idx}", str(getattr(row, "period", "")))
+            cover.write_number(f"U{row_idx}", float(getattr(row, "value", 0.0)))
+
+        chart_cover_split = workbook.add_chart({"type": "doughnut"})
+        chart_cover_split.add_series(
+            {
+                "name": "Hospital split",
+                "categories": "='Cover'!$K$3:$K$5",
+                "values": "='Cover'!$L$3:$L$5",
+                "data_labels": {"percentage": True, "leader_lines": True},
+                "points": [
+                    {"fill": {"color": "#4f78ad"}},
+                    {"fill": {"color": "#b25666"}},
+                    {"fill": {"color": "#94a3b8"}},
+                ],
+            }
+        )
+        chart_cover_split.set_title({"name": "Public vs Private mix"})
+        chart_cover_split.set_legend({"position": "bottom"})
+        chart_cover_split.set_chartarea({"border": {"none": True}})
+        cover.insert_chart("B15", chart_cover_split, {"x_scale": 1.18, "y_scale": 1.26})
+
+        top_cover_end = max(3, 2 + len(top_cover_df))
+        chart_cover_top = workbook.add_chart({"type": "column"})
+        chart_cover_top.add_series(
+            {
+                "name": "Score",
+                "categories": f"='Cover'!$N$3:$N${top_cover_end}",
+                "values": f"='Cover'!$O$3:$O${top_cover_end}",
+                "fill": {"color": "#5ea388"},
+                "border": {"color": "#4d8b73"},
+                "data_labels": {"value": True},
+            }
+        )
+        chart_cover_top.set_title({"name": "Top hospitals by score"})
+        chart_cover_top.set_y_axis({"name": "Score", "max": 100, "major_gridlines": {"visible": False}})
+        chart_cover_top.set_x_axis({"label_position": "low"})
+        chart_cover_top.set_legend({"none": True})
+        chart_cover_top.set_chartarea({"border": {"none": True}})
+        chart_cover_top.set_plotarea({"border": {"none": True}})
+        cover.insert_chart("E15", chart_cover_top, {"x_scale": 1.3, "y_scale": 1.26})
+
+        if not market_trend_df.empty:
+            market_end = 2 + len(market_trend_df)
+            chart_market_trend = workbook.add_chart({"type": "line"})
+            chart_market_trend.add_series(
+                {
+                    "name": "Market EUR per capita",
+                    "categories": f"='Cover'!$Q$3:$Q${market_end}",
+                    "values": f"='Cover'!$R$3:$R${market_end}",
+                    "line": {"color": "#3b82f6", "width": 2.25},
+                    "marker": {"type": "circle", "size": 4, "border": {"color": "#2563eb"}, "fill": {"color": "#bfdbfe"}},
+                }
+            )
+            chart_market_trend.set_title({"name": f"Market state trend - {selected_ccaa}"})
+            chart_market_trend.set_y_axis({"name": "EUR/capita", "major_gridlines": {"visible": False}})
+            chart_market_trend.set_x_axis({"name": "Year-Month", "num_font": {"rotation": -45, "size": 8}})
+            chart_market_trend.set_legend({"none": True})
+            chart_market_trend.set_chartarea({"border": {"none": True}})
+            chart_market_trend.set_plotarea({"border": {"none": True}})
+            cover.insert_chart("B38", chart_market_trend, {"x_scale": 1.18, "y_scale": 1.05})
+        else:
+            cover.merge_range("B38:E41", "No market time-series available for selected CCAA.", fmt_cover_highlight)
+
+        if not disease_trend_df.empty:
+            disease_end = 2 + len(disease_trend_df)
+            chart_disease_trend = workbook.add_chart({"type": "line"})
+            chart_disease_trend.add_series(
+                {
+                    "name": f"{selected_disease} prevalence",
+                    "categories": f"='Cover'!$T$3:$T${disease_end}",
+                    "values": f"='Cover'!$U$3:$U${disease_end}",
+                    "line": {"color": "#f59e0b", "width": 2.25},
+                    "marker": {"type": "diamond", "size": 5, "border": {"color": "#b45309"}, "fill": {"color": "#fde68a"}},
+                    "data_labels": {"value": True},
+                }
+            )
+            chart_disease_trend.set_title({"name": f"Disease trend ({selected_disease}) - {selected_ccaa}"})
+            chart_disease_trend.set_y_axis({"name": "%", "major_gridlines": {"visible": False}})
+            chart_disease_trend.set_x_axis({"name": "Year"})
+            chart_disease_trend.set_legend({"none": True})
+            chart_disease_trend.set_chartarea({"border": {"none": True}})
+            chart_disease_trend.set_plotarea({"border": {"none": True}})
+            cover.insert_chart("E38", chart_disease_trend, {"x_scale": 1.3, "y_scale": 1.05})
+        else:
+            cover.merge_range(
+                "F38:I41",
+                f"No historical disease trend available for '{selected_disease}'.",
+                fmt_cover_highlight,
+            )
+
+        cover.set_row(1, 30)
+        cover.set_row(2, 20)
+        cover.set_row(4, 20)
+        cover.set_row(6, 20)
+        cover.set_row(7, 24)
+        cover.set_row(8, 26)
+        cover.set_row(10, 20)
+        cover.set_row(11, 24)
+        cover.set_row(12, 40)
 
         summary = workbook.add_worksheet("Executive Summary")
-        summary.write("A1", "Executive Summary", fmt_title)
-        summary.write("A3", "Executive text", fmt_subtitle)
-        summary.merge_range("A4:F7", payload.executive_summary, fmt_wrap)
-        summary.write("A9", "KPI", fmt_label)
-        summary.write("B9", "Value", fmt_label)
-        summary_rows = [
-            ("Target hospitals", payload.kpis.get("target_hospitals", 0)),
-            ("Total beds", payload.kpis.get("total_beds", 0)),
-            ("Average score", round(float(payload.kpis.get("avg_score", 0)), 2)),
-            ("Max score", round(float(payload.kpis.get("max_score", 0)), 2)),
-            ("Market potential", float(payload.kpis.get("market_potential", 0))),
-            ("Tier 1 hospitals", payload.kpis.get("tier_1_hospitals", 0)),
-        ]
-        for idx, (name, value) in enumerate(summary_rows, start=10):
-            summary.write(f"A{idx}", name, fmt_value)
-            if name == "Market potential":
-                summary.write_number(f"B{idx}", float(value), fmt_currency)
-            else:
-                summary.write(f"B{idx}", value, fmt_value)
-        summary.set_column("A:A", 28)
-        summary.set_column("B:B", 20)
-        summary.set_column("C:F", 16)
+        summary.hide_gridlines(2)
+        summary.set_zoom(92)
+        summary.set_column("A:A", 4)
+        summary.set_column("B:B", 24)
+        summary.set_column("C:C", 18)
+        summary.set_column("D:D", 20)
+        summary.set_column("E:E", 18)
+        summary.set_column("F:F", 20)
+        summary.set_column("G:G", 18)
+        summary.set_column("H:H", 20)
+        summary.set_column("I:I", 18)
+        summary.set_column("J:O", 14)
+
+        summary.merge_range("B2:I3", "Executive Dashboard - Opportunity Pack", fmt_header_bar)
+        context_text = (
+            f"CCAA: {payload.context.get('ccaa', 'N/A')} | "
+            f"Disease: {payload.context.get('disease', 'N/A')} | "
+            f"Snapshot: {payload.context.get('snapshot_date', 'N/A')}"
+        )
+        summary.merge_range("B4:I4", context_text, fmt_context)
+
+        # KPI cards
+        summary.merge_range("B6:C6", "Target hospitals", fmt_card_label)
+        summary.merge_range("D6:E6", "Total beds", fmt_card_label)
+        summary.merge_range("F6:G6", "Average score", fmt_card_label)
+        summary.merge_range("H6:I6", "Market potential (EUR)", fmt_card_label)
+
+        summary.merge_range("B7:C8", int(payload.kpis.get("target_hospitals", 0)), fmt_card_value)
+        summary.merge_range("D7:E8", int(payload.kpis.get("total_beds", 0)), fmt_card_value)
+        summary.merge_range("F7:G8", round(float(payload.kpis.get("avg_score", 0)), 1), fmt_card_value)
+        summary.merge_range("H7:I8", float(payload.kpis.get("market_potential", 0)), fmt_card_value_currency)
+
+        summary.merge_range("B10:C10", "Tier 1 hospitals", fmt_card_label)
+        summary.merge_range("D10:E10", "Max score", fmt_card_label)
+        summary.merge_range("F10:I10", "Executive summary", fmt_section)
+
+        summary.merge_range("B11:C12", int(payload.kpis.get("tier_1_hospitals", 0)), fmt_card_value)
+        summary.merge_range("D11:E12", round(float(payload.kpis.get("max_score", 0)), 1), fmt_card_value)
+        summary.merge_range("F11:I12", payload.executive_summary, fmt_wrap)
+
+        # Build chart datasets on hidden helper columns.
+        target_df = payload.target_hospitals.copy()
+        target_df["dependency"] = target_df.get("dependency", "").fillna("").astype(str)
+
+        def _bucket_hospital_type(value: str) -> str:
+            lower = value.lower()
+            if "privad" in lower:
+                return "Private"
+            if (
+                "public" in lower
+                or "públic" in lower
+                or "servicios e institutos de salud" in lower
+                or "seguridad social" in lower
+                or "autonomica" in lower
+                or "autonómica" in lower
+            ):
+                return "Public"
+            return "Other"
+
+        type_split = (
+            target_df["dependency"].map(_bucket_hospital_type).value_counts().reindex(["Public", "Private", "Other"], fill_value=0)
+        )
+
+        summary.write("K2", "Type")
+        summary.write("L2", "Hospitals")
+        for row_idx, (label, value) in enumerate(type_split.items(), start=3):
+            summary.write(f"K{row_idx}", label)
+            summary.write_number(f"L{row_idx}", int(value))
+
+        top_chart_df = payload.top_score_chart.copy().head(8)
+        summary.write("K8", "Hospital")
+        summary.write("L8", "Score")
+        for row_idx, row in enumerate(top_chart_df.itertuples(index=False), start=9):
+            summary.write(f"K{row_idx}", str(getattr(row, "hospital", "")))
+            summary.write_number(f"L{row_idx}", float(getattr(row, "score", 0.0)))
+
+        tier_df = payload.tier_distribution.copy()
+        if tier_df.empty:
+            tier_df = pd.DataFrame({"tier": ["Tier 1", "Tier 2", "Tier 3", "Tier 4"], "hospitals": [0, 0, 0, 0]})
+        summary.write("N2", "Tier")
+        summary.write("O2", "Hospitals")
+        for row_idx, row in enumerate(tier_df.itertuples(index=False), start=3):
+            summary.write(f"N{row_idx}", str(getattr(row, "tier", "")))
+            summary.write_number(f"O{row_idx}", int(getattr(row, "hospitals", 0)))
+
+        # Public / private split chart
+        chart_split = workbook.add_chart({"type": "doughnut"})
+        chart_split.add_series(
+            {
+                "name": "Hospital type split",
+                "categories": "='Executive Summary'!$K$3:$K$5",
+                "values": "='Executive Summary'!$L$3:$L$5",
+                "data_labels": {"percentage": True, "leader_lines": True},
+                "points": [
+                    {"fill": {"color": "#4f78ad"}},
+                    {"fill": {"color": "#b25666"}},
+                    {"fill": {"color": "#94a3b8"}},
+                ],
+            }
+        )
+        chart_split.set_title({"name": "Public vs Private hospitals"})
+        chart_split.set_legend({"position": "bottom"})
+        chart_split.set_chartarea({"border": {"none": True}})
+        summary.insert_chart("B14", chart_split, {"x_scale": 1.05, "y_scale": 1.1})
+
+        # Top hospitals by score chart
+        top_end = max(9, 8 + len(top_chart_df))
+        chart_top = workbook.add_chart({"type": "column"})
+        chart_top.add_series(
+            {
+                "name": "Opportunity score",
+                "categories": f"='Executive Summary'!$K$9:$K${top_end}",
+                "values": f"='Executive Summary'!$L$9:$L${top_end}",
+                "fill": {"color": "#5ea388"},
+                "border": {"color": "#4d8b73"},
+                "data_labels": {"value": True},
+            }
+        )
+        chart_top.set_title({"name": "Top hospitals by opportunity score"})
+        chart_top.set_y_axis({"name": "Score", "max": 100, "major_gridlines": {"visible": False}})
+        chart_top.set_x_axis({"label_position": "low"})
+        chart_top.set_legend({"none": True})
+        chart_top.set_chartarea({"border": {"none": True}})
+        chart_top.set_plotarea({"border": {"none": True}})
+        summary.insert_chart("E14", chart_top, {"x_scale": 1.22, "y_scale": 1.1})
+
+        # Tier distribution chart
+        tier_end = max(3, 2 + len(tier_df))
+        chart_tier = workbook.add_chart({"type": "bar"})
+        chart_tier.add_series(
+            {
+                "name": "Hospitals",
+                "categories": f"='Executive Summary'!$N$3:$N${tier_end}",
+                "values": f"='Executive Summary'!$O$3:$O${tier_end}",
+                "fill": {"color": "#4f8b9f"},
+                "border": {"none": True},
+                "data_labels": {"value": True},
+            }
+        )
+        chart_tier.set_title({"name": "Hospital priority tier distribution"})
+        chart_tier.set_x_axis({"name": "Hospitals", "major_gridlines": {"visible": False}})
+        chart_tier.set_legend({"none": True})
+        chart_tier.set_chartarea({"border": {"none": True}})
+        chart_tier.set_plotarea({"border": {"none": True}})
+        summary.insert_chart("B30", chart_tier, {"x_scale": 1.05, "y_scale": 0.95})
+
+        summary.set_row(1, 24)
+        summary.set_row(5, 20)
+        summary.set_row(6, 22)
+        summary.set_row(7, 24)
+        summary.set_row(10, 20)
+        summary.set_row(11, 48)
 
         payload.therapeutic_table.to_excel(writer, sheet_name="Therapeutic Opportunity", index=False, startrow=2)
         therapeutic_sheet = writer.sheets["Therapeutic Opportunity"]
