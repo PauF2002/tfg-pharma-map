@@ -138,6 +138,9 @@ def _insert_sheet_image(
     y_scale: float,
     x_offset: int = 0,
     y_offset: int = 0,
+    target_width_px: int | None = None,
+    target_height_px: int | None = None,
+    keep_aspect: bool = True,
 ) -> bool:
     if not image_path.exists():
         return False
@@ -160,6 +163,48 @@ def _insert_sheet_image(
     else:
         return False
 
+    scale_x = x_scale
+    scale_y = y_scale
+    if target_width_px and target_height_px:
+        try:
+            import struct
+
+            width_px = 0
+            height_px = 0
+            if image_bytes[:8] == b"\x89PNG\r\n\x1a\n" and len(image_bytes) >= 24:
+                width_px, height_px = struct.unpack(">II", image_bytes[16:24])
+            elif image_bytes[:2] == b"\xff\xd8":
+                idx = 2
+                while idx + 9 < len(image_bytes):
+                    if image_bytes[idx] != 0xFF:
+                        idx += 1
+                        continue
+                    marker = image_bytes[idx + 1]
+                    if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                        seg_len = struct.unpack(">H", image_bytes[idx + 2:idx + 4])[0]
+                        if idx + 2 + seg_len <= len(image_bytes):
+                            height_px = struct.unpack(">H", image_bytes[idx + 5:idx + 7])[0]
+                            width_px = struct.unpack(">H", image_bytes[idx + 7:idx + 9])[0]
+                        break
+                    if marker in (0xD8, 0xD9):
+                        idx += 2
+                        continue
+                    seg_len = struct.unpack(">H", image_bytes[idx + 2:idx + 4])[0]
+                    idx += 2 + seg_len
+
+            if width_px > 0 and height_px > 0:
+                target_sx = target_width_px / float(width_px)
+                target_sy = target_height_px / float(height_px)
+                if keep_aspect:
+                    factor = min(target_sx, target_sy)
+                    scale_x = factor
+                    scale_y = factor
+                else:
+                    scale_x = target_sx
+                    scale_y = target_sy
+        except Exception:
+            pass
+
     image_stream = BytesIO(image_bytes)
     try:
         sheet.insert_image(
@@ -167,8 +212,8 @@ def _insert_sheet_image(
             image_path.name,
             {
                 "image_data": image_stream,
-                "x_scale": x_scale,
-                "y_scale": y_scale,
+                "x_scale": scale_x,
+                "y_scale": scale_y,
                 "x_offset": x_offset,
                 "y_offset": y_offset,
                 "object_position": 2,
@@ -188,6 +233,9 @@ def _insert_sheet_image_from_url(
     y_scale: float,
     x_offset: int = 0,
     y_offset: int = 0,
+    target_width_px: int | None = None,
+    target_height_px: int | None = None,
+    keep_aspect: bool = True,
 ) -> bool:
     try:
         with urlopen(image_url, timeout=6) as response:
@@ -198,14 +246,56 @@ def _insert_sheet_image_from_url(
     if not image_bytes:
         return False
 
+    scale_x = x_scale
+    scale_y = y_scale
+    if target_width_px and target_height_px:
+        try:
+            import struct
+
+            width_px = 0
+            height_px = 0
+            if image_bytes[:8] == b"\x89PNG\r\n\x1a\n" and len(image_bytes) >= 24:
+                width_px, height_px = struct.unpack(">II", image_bytes[16:24])
+            elif image_bytes[:2] == b"\xff\xd8":
+                idx = 2
+                while idx + 9 < len(image_bytes):
+                    if image_bytes[idx] != 0xFF:
+                        idx += 1
+                        continue
+                    marker = image_bytes[idx + 1]
+                    if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                        seg_len = struct.unpack(">H", image_bytes[idx + 2:idx + 4])[0]
+                        if idx + 2 + seg_len <= len(image_bytes):
+                            height_px = struct.unpack(">H", image_bytes[idx + 5:idx + 7])[0]
+                            width_px = struct.unpack(">H", image_bytes[idx + 7:idx + 9])[0]
+                        break
+                    if marker in (0xD8, 0xD9):
+                        idx += 2
+                        continue
+                    seg_len = struct.unpack(">H", image_bytes[idx + 2:idx + 4])[0]
+                    idx += 2 + seg_len
+
+            if width_px > 0 and height_px > 0:
+                target_sx = target_width_px / float(width_px)
+                target_sy = target_height_px / float(height_px)
+                if keep_aspect:
+                    factor = min(target_sx, target_sy)
+                    scale_x = factor
+                    scale_y = factor
+                else:
+                    scale_x = target_sx
+                    scale_y = target_sy
+        except Exception:
+            pass
+
     try:
         sheet.insert_image(
             cell,
             "remote_flag.png",
             {
                 "image_data": BytesIO(image_bytes),
-                "x_scale": x_scale,
-                "y_scale": y_scale,
+                "x_scale": scale_x,
+                "y_scale": scale_y,
                 "x_offset": x_offset,
                 "y_offset": y_offset,
                 "object_position": 2,
@@ -229,7 +319,9 @@ def _load_market_trend_for_ccaa(project_root: Path, ccaa: str, max_points: int =
         return pd.DataFrame(columns=["period", "value"])
 
     scoped["period"] = scoped.get("year_month", "").astype(str)
-    scoped["value"] = pd.to_numeric(scoped.get("market_monthly_eur_per_capita"), errors="coerce")
+    scoped["value"] = pd.to_numeric(scoped.get("market_monthly_eur"), errors="coerce")
+    if scoped["value"].isna().all():
+        scoped["value"] = pd.to_numeric(scoped.get("market_monthly_eur_per_capita"), errors="coerce")
     scoped = scoped.dropna(subset=["value"])
     scoped = scoped[scoped["period"].str.len() > 0]
     scoped = scoped.sort_values("period").tail(max_points)
@@ -897,10 +989,20 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         cover.set_column("D:D", 18)
         cover.set_column("E:E", 18)
         cover.set_column("F:F", 18)
-        cover.set_column("G:G", 18)
-        cover.set_column("H:H", 18)
+        cover.set_column("G:G", 15.67)
+        cover.set_column("H:H", 0)
         cover.set_column("I:I", 18)
         cover.set_column("J:Z", 14, None, {"hidden": True})
+        cover.set_column("BW:BZ", 40, None, {"hidden": False})
+        cover.set_row(1, 36)
+        cover.set_row(2, 24)
+        cover.set_row(4, 20)
+        cover.set_row(6, 20)
+        cover.set_row(7, 24)
+        cover.set_row(8, 28)
+        cover.set_row(10, 20)
+        cover.set_row(11, 24)
+        cover.set_row(12, 60)
 
         cover.merge_range("B2:F2", "Target Opportunity Pack", fmt_cover_title)
         cover.merge_range(
@@ -925,26 +1027,39 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         cover.merge_range("G2:H2", "CCAA flag", fmt_section)
         cover.write("I2", "Disease", fmt_section)
 
+        flag_x_scale = 0.13
+        flag_y_scale = 0.13
+        flag_x_offset = 0
+        flag_y_offset = 0
+        flag_target_width_px = 115
+        flag_target_height_px = 78
+
         inserted_flag = False
         if ccaa_flag_path is not None:
             inserted_flag = _insert_sheet_image(
                 cover,
                 "G3",
                 ccaa_flag_path,
-                x_scale=0.45,
-                y_scale=0.45,
-                x_offset=8,
-                y_offset=2,
+                x_scale=flag_x_scale,
+                y_scale=flag_y_scale,
+                x_offset=flag_x_offset,
+                y_offset=flag_y_offset,
+                target_width_px=flag_target_width_px,
+                target_height_px=flag_target_height_px,
+                keep_aspect=False,
             )
         if (not inserted_flag) and ccaa_flag_url:
             inserted_flag = _insert_sheet_image_from_url(
                 cover,
                 "G3",
                 ccaa_flag_url,
-                x_scale=0.45,
-                y_scale=0.45,
-                x_offset=8,
-                y_offset=2,
+                x_scale=flag_x_scale,
+                y_scale=flag_y_scale,
+                x_offset=flag_x_offset,
+                y_offset=flag_y_offset,
+                target_width_px=flag_target_width_px,
+                target_height_px=flag_target_height_px,
+                keep_aspect=False,
             )
         if not inserted_flag:
             cover.merge_range("G3:H4", f"Flag: {selected_ccaa}", fmt_cover_highlight)
@@ -984,166 +1099,77 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         cover.merge_range("F11:I11", "Investment narrative", fmt_section)
         cover.merge_range("F12:I13", payload.executive_summary, fmt_cover_story)
 
-        target_df_cover = payload.target_hospitals.copy()
-        target_df_cover["dependency"] = target_df_cover.get("dependency", "").fillna("").astype(str)
-
-        def _cover_bucket_hospital_type(value: str) -> str:
-            lower = value.lower()
-            if "privad" in lower:
-                return "Private"
-            if (
-                "public" in lower
-                or "públic" in lower
-                or "servicios e institutos de salud" in lower
-                or "seguridad social" in lower
-                or "autonomica" in lower
-                or "autonómica" in lower
-            ):
-                return "Public"
-            return "Other"
-
-        split_cover = (
-            target_df_cover["dependency"]
-            .map(_cover_bucket_hospital_type)
-            .value_counts()
-            .reindex(["Public", "Private", "Other"], fill_value=0)
-        )
-
-        cover.write("K2", "Type")
-        cover.write("L2", "Hospitals")
-        for row_idx, (label, value) in enumerate(split_cover.items(), start=3):
-            cover.write(f"K{row_idx}", label)
-            cover.write_number(f"L{row_idx}", int(value))
-
-        top_cover_df = payload.top_score_chart.copy().head(5)
-        cover.write("N2", "Hospital")
-        cover.write("O2", "Score")
-        for row_idx, row in enumerate(top_cover_df.itertuples(index=False), start=3):
-            cover.write(f"N{row_idx}", str(getattr(row, "hospital", "")))
-            cover.write_number(f"O{row_idx}", float(getattr(row, "score", 0.0)))
-
         market_trend_df = _load_market_trend_for_ccaa(project_root, selected_ccaa, max_points=24)
-        cover.write("Q2", "Period")
-        cover.write("R2", "Market per capita")
-        for row_idx, row in enumerate(market_trend_df.itertuples(index=False), start=3):
-            cover.write(f"Q{row_idx}", str(getattr(row, "period", "")))
-            cover.write_number(f"R{row_idx}", float(getattr(row, "value", 0.0)))
 
-        disease_trend_df = _load_disease_trend_for_ccaa(project_root, selected_ccaa, selected_disease)
-        cover.write("T2", "Period")
-        cover.write("U2", "Disease %")
-        for row_idx, row in enumerate(disease_trend_df.itertuples(index=False), start=3):
-            cover.write(f"T{row_idx}", str(getattr(row, "period", "")))
-            cover.write_number(f"U{row_idx}", float(getattr(row, "value", 0.0)))
-
-        chart_cover_split = workbook.add_chart({"type": "doughnut"})
-        chart_cover_split.add_series(
-            {
-                "name": "Hospital split",
-                "categories": "='Cover'!$K$3:$K$5",
-                "values": "='Cover'!$L$3:$L$5",
-                "data_labels": {"percentage": True, "leader_lines": True},
-                "points": [
-                    {"fill": {"color": "#4f78ad"}},
-                    {"fill": {"color": "#b25666"}},
-                    {"fill": {"color": "#94a3b8"}},
-                ],
-            }
-        )
-        chart_cover_split.set_title({"name": "Public vs Private mix"})
-        chart_cover_split.set_legend({"position": "bottom"})
-        chart_cover_split.set_chartarea({"border": {"none": True}})
-        cover.insert_chart("B15", chart_cover_split, {"x_scale": 1.18, "y_scale": 1.26})
-
-        top_cover_end = max(3, 2 + len(top_cover_df))
-        chart_cover_top = workbook.add_chart({"type": "column"})
-        chart_cover_top.add_series(
-            {
-                "name": "Score",
-                "categories": f"='Cover'!$N$3:$N${top_cover_end}",
-                "values": f"='Cover'!$O$3:$O${top_cover_end}",
-                "fill": {"color": "#5ea388"},
-                "border": {"color": "#4d8b73"},
-                "data_labels": {"value": True},
-            }
-        )
-        chart_cover_top.set_title({"name": "Top hospitals by score"})
-        chart_cover_top.set_y_axis({"name": "Score", "max": 100, "major_gridlines": {"visible": False}})
-        chart_cover_top.set_x_axis({"label_position": "low"})
-        chart_cover_top.set_legend({"none": True})
-        chart_cover_top.set_chartarea({"border": {"none": True}})
-        chart_cover_top.set_plotarea({"border": {"none": True}})
-        cover.insert_chart("E15", chart_cover_top, {"x_scale": 1.3, "y_scale": 1.26})
-
-        if not market_trend_df.empty:
-            market_end = 2 + len(market_trend_df)
-            chart_market_trend = workbook.add_chart({"type": "line"})
-            chart_market_trend.add_series(
-                {
-                    "name": "Market EUR per capita",
-                    "categories": f"='Cover'!$Q$3:$Q${market_end}",
-                    "values": f"='Cover'!$R$3:$R${market_end}",
-                    "line": {"color": "#3b82f6", "width": 2.25},
-                    "marker": {"type": "circle", "size": 4, "border": {"color": "#2563eb"}, "fill": {"color": "#bfdbfe"}},
-                }
+        # Hidden helper data for a dedicated pharma spend trend chart on Cover.
+        pharma_spend_df = market_trend_df.copy()
+        if not pharma_spend_df.empty:
+            pharma_spend_df["rolling_3m"] = (
+                pd.to_numeric(pharma_spend_df["value"], errors="coerce")
+                .rolling(window=3, min_periods=1)
+                .mean()
             )
-            chart_market_trend.set_title({"name": f"Market state trend - {selected_ccaa}"})
-            chart_market_trend.set_y_axis({"name": "EUR/capita", "major_gridlines": {"visible": False}})
-            chart_market_trend.set_x_axis({"name": "Year-Month", "num_font": {"rotation": -45, "size": 8}})
-            chart_market_trend.set_legend({"none": True})
-            chart_market_trend.set_chartarea({"border": {"none": True}})
-            chart_market_trend.set_plotarea({"border": {"none": True}})
-            cover.insert_chart("B38", chart_market_trend, {"x_scale": 1.18, "y_scale": 1.05})
         else:
-            cover.merge_range("B38:E41", "No market time-series available for selected CCAA.", fmt_cover_highlight)
+            pharma_spend_df = pd.DataFrame(columns=["period", "value", "rolling_3m"])
 
-        if not disease_trend_df.empty:
-            disease_end = 2 + len(disease_trend_df)
-            chart_disease_trend = workbook.add_chart({"type": "line"})
-            chart_disease_trend.add_series(
+        pharma_mean = float(pd.to_numeric(pharma_spend_df.get("value"), errors="coerce").mean()) if not pharma_spend_df.empty else 0.0
+
+        cover.write("BW2", "Period")
+        cover.write("BX2", "Pharma spend EUR")
+        cover.write("BY2", "3M moving avg")
+        cover.write("BZ2", "Mean EUR")
+        for row_idx, row in enumerate(pharma_spend_df.itertuples(index=False), start=3):
+            cover.write(f"BW{row_idx}", str(getattr(row, "period", "")))
+            cover.write_number(f"BX{row_idx}", float(getattr(row, "value", 0.0)))
+            cover.write_number(f"BY{row_idx}", float(getattr(row, "rolling_3m", 0.0)))
+            cover.write_number(f"BZ{row_idx}", pharma_mean)
+
+        if not pharma_spend_df.empty:
+            pharma_end = 2 + len(pharma_spend_df)
+            chart_pharma_spend = workbook.add_chart({"type": "column"})
+            chart_pharma_spend.add_series(
                 {
-                    "name": f"{selected_disease} prevalence",
-                    "categories": f"='Cover'!$T$3:$T${disease_end}",
-                    "values": f"='Cover'!$U$3:$U${disease_end}",
-                    "line": {"color": "#f59e0b", "width": 2.25},
-                    "marker": {"type": "diamond", "size": 5, "border": {"color": "#b45309"}, "fill": {"color": "#fde68a"}},
+                    "name": "Pharma spend EUR",
+                    "categories": f"='Cover'!$BW$3:$BW${pharma_end}",
+                    "values": f"='Cover'!$BX$3:$BX${pharma_end}",
+                    "fill": {"color": "#0ea5e9"},
+                    "border": {"color": "#0369a1"},
                     "data_labels": {"value": True},
                 }
             )
-            chart_disease_trend.set_title({"name": f"Disease trend ({selected_disease}) - {selected_ccaa}"})
-            chart_disease_trend.set_y_axis({"name": "%", "major_gridlines": {"visible": False}})
-            chart_disease_trend.set_x_axis({"name": "Year"})
-            chart_disease_trend.set_legend({"none": True})
-            chart_disease_trend.set_chartarea({"border": {"none": True}})
-            chart_disease_trend.set_plotarea({"border": {"none": True}})
-            cover.insert_chart("E38", chart_disease_trend, {"x_scale": 1.3, "y_scale": 1.05})
-        else:
-            cover.merge_range(
-                "F38:I41",
-                f"No historical disease trend available for '{selected_disease}'.",
-                fmt_cover_highlight,
-            )
 
-        cover.set_row(1, 30)
-        cover.set_row(2, 20)
-        cover.set_row(4, 20)
-        cover.set_row(6, 20)
-        cover.set_row(7, 24)
-        cover.set_row(8, 26)
-        cover.set_row(10, 20)
-        cover.set_row(11, 24)
-        cover.set_row(12, 40)
+            chart_pharma_mean = workbook.add_chart({"type": "line"})
+            chart_pharma_mean.add_series(
+                {
+                    "name": "Media",
+                    "categories": f"='Cover'!$BW$3:$BW${pharma_end}",
+                    "values": f"='Cover'!$BZ$3:$BZ${pharma_end}",
+                    "line": {"color": "#FBD1AE", "width": 1.75},
+                    "marker": {"type": "none"},
+                }
+            )
+            chart_pharma_spend.combine(chart_pharma_mean)
+
+            chart_pharma_spend.set_title({"name": f"Gasto farmaceutico ({selected_ccaa})"})
+            chart_pharma_spend.set_y_axis({"name": "EUR", "major_gridlines": {"visible": False}})
+            chart_pharma_spend.set_x_axis({"name": "Year-Month", "num_font": {"rotation": -45, "size": 8}})
+            chart_pharma_spend.set_legend({"position": "bottom"})
+            chart_pharma_spend.set_chartarea({"border": {"none": True}})
+            chart_pharma_spend.set_plotarea({"border": {"none": True}})
+            cover.insert_chart("B15", chart_pharma_spend, {"x_scale": 2.94, "y_scale": 1.05})
+        else:
+            cover.merge_range("B15:I18", "No hay datos de gasto farmaceutico para la CCAA seleccionada.", fmt_cover_highlight)
 
         summary = workbook.add_worksheet("Executive Summary")
         summary.hide_gridlines(2)
-        summary.set_zoom(92)
+        summary.set_zoom(80)
         summary.set_column("A:A", 4)
         summary.set_column("B:B", 24)
         summary.set_column("C:C", 18)
         summary.set_column("D:D", 20)
         summary.set_column("E:E", 18)
         summary.set_column("F:F", 20)
-        summary.set_column("G:G", 18)
+        summary.set_column("G:G", 35)
         summary.set_column("H:H", 20)
         summary.set_column("I:I", 18)
         summary.set_column("J:O", 14)
@@ -1198,35 +1224,35 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
             target_df["dependency"].map(_bucket_hospital_type).value_counts().reindex(["Public", "Private", "Other"], fill_value=0)
         )
 
-        summary.write("K2", "Type")
-        summary.write("L2", "Hospitals")
+        summary.write("U2", "Type")
+        summary.write("V2", "Hospitals")
         for row_idx, (label, value) in enumerate(type_split.items(), start=3):
-            summary.write(f"K{row_idx}", label)
-            summary.write_number(f"L{row_idx}", int(value))
+            summary.write(f"U{row_idx}", label)
+            summary.write_number(f"V{row_idx}", int(value))
 
         top_chart_df = payload.top_score_chart.copy().head(8)
-        summary.write("K8", "Hospital")
-        summary.write("L8", "Score")
+        summary.write("U8", "Hospital")
+        summary.write("V8", "Score")
         for row_idx, row in enumerate(top_chart_df.itertuples(index=False), start=9):
-            summary.write(f"K{row_idx}", str(getattr(row, "hospital", "")))
-            summary.write_number(f"L{row_idx}", float(getattr(row, "score", 0.0)))
+            summary.write(f"U{row_idx}", str(getattr(row, "hospital", "")))
+            summary.write_number(f"V{row_idx}", float(getattr(row, "score", 0.0)))
 
         tier_df = payload.tier_distribution.copy()
         if tier_df.empty:
             tier_df = pd.DataFrame({"tier": ["Tier 1", "Tier 2", "Tier 3", "Tier 4"], "hospitals": [0, 0, 0, 0]})
-        summary.write("N2", "Tier")
-        summary.write("O2", "Hospitals")
+        summary.write("W2", "Tier")
+        summary.write("X2", "Hospitals")
         for row_idx, row in enumerate(tier_df.itertuples(index=False), start=3):
-            summary.write(f"N{row_idx}", str(getattr(row, "tier", "")))
-            summary.write_number(f"O{row_idx}", int(getattr(row, "hospitals", 0)))
+            summary.write(f"W{row_idx}", str(getattr(row, "tier", "")))
+            summary.write_number(f"X{row_idx}", int(getattr(row, "hospitals", 0)))
 
         # Public / private split chart
         chart_split = workbook.add_chart({"type": "doughnut"})
         chart_split.add_series(
             {
                 "name": "Hospital type split",
-                "categories": "='Executive Summary'!$K$3:$K$5",
-                "values": "='Executive Summary'!$L$3:$L$5",
+                "categories": "='Executive Summary'!$U$3:$U$5",
+                "values": "='Executive Summary'!$V$3:$V$5",
                 "data_labels": {"percentage": True, "leader_lines": True},
                 "points": [
                     {"fill": {"color": "#4f78ad"}},
@@ -1246,8 +1272,8 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         chart_top.add_series(
             {
                 "name": "Opportunity score",
-                "categories": f"='Executive Summary'!$K$9:$K${top_end}",
-                "values": f"='Executive Summary'!$L$9:$L${top_end}",
+                "categories": f"='Executive Summary'!$U$9:$U${top_end}",
+                "values": f"='Executive Summary'!$V$9:$V${top_end}",
                 "fill": {"color": "#5ea388"},
                 "border": {"color": "#4d8b73"},
                 "data_labels": {"value": True},
@@ -1267,8 +1293,8 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         chart_tier.add_series(
             {
                 "name": "Hospitals",
-                "categories": f"='Executive Summary'!$N$3:$N${tier_end}",
-                "values": f"='Executive Summary'!$O$3:$O${tier_end}",
+                "categories": f"='Executive Summary'!$W$3:$W${tier_end}",
+                "values": f"='Executive Summary'!$X$3:$X${tier_end}",
                 "fill": {"color": "#4f8b9f"},
                 "border": {"none": True},
                 "data_labels": {"value": True},
@@ -1279,7 +1305,7 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         chart_tier.set_legend({"none": True})
         chart_tier.set_chartarea({"border": {"none": True}})
         chart_tier.set_plotarea({"border": {"none": True}})
-        summary.insert_chart("B30", chart_tier, {"x_scale": 1.05, "y_scale": 0.95})
+        summary.insert_chart("H14", chart_tier, {"x_scale": 1.05, "y_scale": 1.1, "x_offset": 24})
 
         summary.set_row(1, 24)
         summary.set_row(5, 20)

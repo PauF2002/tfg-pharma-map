@@ -292,6 +292,13 @@ class OpportunityPackView:
     object-fit: cover;
     border-radius: 3px;
     border: 1px solid #d3d8e0;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    transform-origin: center center;
+    display: inline-block;
+}
+.op-flag:hover {
+    transform: scale(1.9);
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
 }
 .op-export-meta {
     margin-top: 4px;
