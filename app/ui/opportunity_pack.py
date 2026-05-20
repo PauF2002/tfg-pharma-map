@@ -330,64 +330,119 @@ def _load_market_trend_for_ccaa(project_root: Path, ccaa: str, max_points: int =
 
 def _load_disease_trend_for_ccaa(project_root: Path, ccaa: str, disease: str) -> pd.DataFrame:
     disease_norm = _norm_text(disease)
-    obesity_terms = ("obesity", "obesidad")
-
-    if not any(term in disease_norm for term in obesity_terms):
-        return pd.DataFrame(columns=["period", "value"])
-
-    obesity_path = project_root / "data" / "raw" / "ine_obesity_ccaa.csv"
-    obesity_df = _safe_read_csv(obesity_path)
-    if obesity_df.empty:
-        return pd.DataFrame(columns=["period", "value"])
-
-    # Source file is tab-delimited in a single quoted column; split if needed.
-    if obesity_df.shape[1] == 1:
-        col = obesity_df.columns[0]
-        expanded = obesity_df[col].astype(str).str.split("\t", expand=True)
-        expanded.columns = ["Comunidad autónoma", "Masa corporal", "Periodo", "Total"]
-        obesity_df = expanded
-
-    ccaa_col = "Comunidad autónoma" if "Comunidad autónoma" in obesity_df.columns else obesity_df.columns[0]
-    mass_col = "Masa corporal" if "Masa corporal" in obesity_df.columns else obesity_df.columns[1]
-    period_col = "Periodo" if "Periodo" in obesity_df.columns else obesity_df.columns[2]
-    total_col = "Total" if "Total" in obesity_df.columns else obesity_df.columns[3]
-
-    scoped = obesity_df.copy()
-    scoped["ccaa_norm"] = scoped[ccaa_col].map(_canonical_ccaa_norm)
-    scoped["mass_norm"] = scoped[mass_col].map(_norm_text)
-    scoped["period"] = pd.to_numeric(scoped[period_col], errors="coerce")
-    scoped["value"] = pd.to_numeric(scoped[total_col].astype(str).str.replace(",", ".", regex=False), errors="coerce")
-
     selected_norm = _canonical_ccaa_norm(ccaa)
-    scoped = scoped[
-        (scoped["ccaa_norm"] == selected_norm)
-        & (scoped["mass_norm"].str.contains("obesidad", na=False))
-    ].copy()
 
-    scoped = scoped.dropna(subset=["period", "value"])
-    if scoped.empty:
-        return pd.DataFrame(columns=["period", "value"])
+    if any(term in disease_norm for term in ("obesity", "obesidad")):
+        obesity_path = project_root / "data" / "raw" / "ine_obesity_ccaa.csv"
+        obesity_df = _safe_read_csv(obesity_path)
+        if obesity_df.empty:
+            return pd.DataFrame(columns=["period", "value"])
 
-    scoped["period"] = scoped["period"].astype(int).astype(str)
-    scoped = scoped.sort_values("period")
-    return scoped[["period", "value"]].copy()
+        # Source file is tab-delimited in a single quoted column; split if needed.
+        if obesity_df.shape[1] == 1:
+            col = obesity_df.columns[0]
+            expanded = obesity_df[col].astype(str).str.split("\t", expand=True)
+            expanded.columns = ["Comunidad autónoma", "Masa corporal", "Periodo", "Total"]
+            obesity_df = expanded
+
+        ccaa_col = "Comunidad autónoma" if "Comunidad autónoma" in obesity_df.columns else obesity_df.columns[0]
+        mass_col = "Masa corporal" if "Masa corporal" in obesity_df.columns else obesity_df.columns[1]
+        period_col = "Periodo" if "Periodo" in obesity_df.columns else obesity_df.columns[2]
+        total_col = "Total" if "Total" in obesity_df.columns else obesity_df.columns[3]
+
+        scoped = obesity_df.copy()
+        scoped["ccaa_norm"] = scoped[ccaa_col].map(_canonical_ccaa_norm)
+        scoped["mass_norm"] = scoped[mass_col].map(_norm_text)
+        scoped["period"] = pd.to_numeric(scoped[period_col], errors="coerce")
+        scoped["value"] = pd.to_numeric(scoped[total_col].astype(str).str.replace(",", ".", regex=False), errors="coerce")
+
+        scoped = scoped[
+            (scoped["ccaa_norm"] == selected_norm)
+            & (scoped["mass_norm"].str.contains("obesidad", na=False))
+        ].copy()
+
+        scoped = scoped.dropna(subset=["period", "value"])
+        if scoped.empty:
+            return pd.DataFrame(columns=["period", "value"])
+
+        scoped["period"] = scoped["period"].astype(int).astype(str)
+        scoped = scoped.sort_values("period")
+        return scoped[["period", "value"]].copy()
+
+    if any(term in disease_norm for term in ("smoking", "smoke", "tabaquismo", "tabaco", "fumador", "fumadores")):
+        smoking_path = project_root / "data" / "processed" / "ccaa_smoking.csv"
+        smoking_df = _safe_read_csv(smoking_path)
+        if smoking_df.empty:
+            smoking_path = project_root / "data" / "raw" / "ine_smoking_ccaa.csv"
+            smoking_df = _safe_read_csv(smoking_path, sep=";")
+
+        if smoking_df.empty:
+            return pd.DataFrame(columns=["period", "value"])
+
+        if "smoking_pct" in smoking_df.columns:
+            scoped = smoking_df.copy()
+            ccaa_col = "CCAA" if "CCAA" in scoped.columns else scoped.columns[0]
+            period_col = "period" if "period" in scoped.columns else None
+            value_col = "smoking_pct"
+            scoped["ccaa_norm"] = scoped[ccaa_col].map(_canonical_ccaa_norm)
+            scoped["value"] = pd.to_numeric(scoped[value_col], errors="coerce")
+            if period_col:
+                scoped["period"] = scoped[period_col].astype(str)
+            else:
+                scoped["period"] = "latest"
+            scoped = scoped[(scoped["ccaa_norm"] == selected_norm)].copy()
+            scoped = scoped.dropna(subset=["value"])
+            if scoped.empty:
+                return pd.DataFrame(columns=["period", "value"])
+            return scoped[["period", "value"]].copy()
+
+        if smoking_df.shape[1] == 1:
+            col = smoking_df.columns[0]
+            expanded = smoking_df[col].astype(str).str.split("\t", expand=True)
+            smoking_df = expanded
+
+        ccaa_col = "Comunidades Autónomas" if "Comunidades Autónomas" in smoking_df.columns else smoking_df.columns[0]
+        status_col = "Consumo de tabaco" if "Consumo de tabaco" in smoking_df.columns else smoking_df.columns[1]
+        value_col = "Total" if "Total" in smoking_df.columns else smoking_df.columns[2]
+
+        scoped = smoking_df.copy()
+        scoped["ccaa_norm"] = scoped[ccaa_col].map(_canonical_ccaa_norm)
+        scoped["status_norm"] = scoped[status_col].map(_norm_text)
+        scoped["value"] = pd.to_numeric(
+            scoped[value_col].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False),
+            errors="coerce",
+        )
+
+        scoped = scoped[
+            (scoped["ccaa_norm"] == selected_norm)
+            & (scoped["status_norm"].str.contains("fuma diariamente", na=False))
+        ].copy()
+        scoped = scoped.dropna(subset=["value"])
+        if scoped.empty:
+            return pd.DataFrame(columns=["period", "value"])
+
+        scoped["period"] = "latest"
+        return scoped[["period", "value"]].copy()
+
+    return pd.DataFrame(columns=["period", "value"])
 
 
 def _normalize_hospital_id(value: object) -> str:
     return str(value or "").strip().replace(",", "").removesuffix(".0")
 
 
-def _safe_read_csv(path: Path) -> pd.DataFrame:
+def _safe_read_csv(path: Path, sep: str = ",") -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
     for encoding in ("utf-8", "utf-8-sig", "latin-1"):
         try:
-            return pd.read_csv(path, encoding=encoding, low_memory=False)
+            return pd.read_csv(path, encoding=encoding, sep=sep, low_memory=False)
         except pd.errors.ParserError:
             try:
                 return pd.read_csv(
                     path,
                     encoding=encoding,
+                    sep=sep,
                     engine="python",
                     on_bad_lines="skip",
                 )
@@ -471,8 +526,12 @@ def _load_hospital_catalog(project_root: Path) -> pd.DataFrame:
     return hospitals_df
 
 
-def _load_ccaa_metrics(project_root: Path) -> pd.DataFrame:
-    score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
+def _load_ccaa_metrics(project_root: Path, disease: str) -> pd.DataFrame:
+    disease_norm = _norm_text(disease)
+    if any(term in disease_norm for term in ("smoking", "smoke", "tabaquismo", "tabaco", "fumador", "fumadores")):
+        score_path = project_root / "data" / "processed" / "ccaa_smoking_opportunity_score.csv"
+    else:
+        score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
     score_df = _safe_read_csv(score_path)
     if score_df.empty:
         return pd.DataFrame(columns=["CCAA", "ccaa_norm", "opportunity_score", "market_12m_avg_eur_per_capita", "market_12m_sum_eur"])
@@ -565,6 +624,14 @@ def _build_therapeutic_block(disease: str) -> tuple[str, pd.DataFrame]:
                 {"molecule": "Liraglutida", "therapy_line": "1L/2L", "potential_medication": "GLP-1 RA", "commercial_note": "Defensa en centros con protocolos activos"},
             ],
         ),
+        "smoking": (
+            "Oportunidad centrada en cesación tabáquica y reducción del riesgo cardio-respiratorio en población fumadora activa.",
+            [
+                {"molecule": "Vareniclina", "therapy_line": "1L", "potential_medication": "Cese tabáquico", "commercial_note": "Primera elección en programas estructurados"},
+                {"molecule": "Bupropion", "therapy_line": "1L/2L", "potential_medication": "Cese tabáquico", "commercial_note": "Opción útil en pacientes seleccionados"},
+                {"molecule": "Sustitución nicotínica", "therapy_line": "1L", "potential_medication": "NRT", "commercial_note": "Alta utilidad en atención primaria y hospital"},
+            ],
+        ),
         "diabetes": (
             "Oportunidad de optimización de control glucémico con reducción de eventos macro y microvasculares en población compleja.",
             [
@@ -607,7 +674,7 @@ def prepare_opportunity_pack_data(
     snapshot_date: str,
 ) -> OpportunityPackPayload:
     hospitals_df = _load_hospital_catalog(project_root)
-    score_df = _load_ccaa_metrics(project_root)
+    score_df = _load_ccaa_metrics(project_root, disease)
 
     if "ccaa_norm" not in hospitals_df.columns:
         if "ccaa" in hospitals_df.columns:

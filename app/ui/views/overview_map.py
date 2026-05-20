@@ -123,16 +123,141 @@ class OverviewMapView:
         palette = get_embedded_theme_palette()
 
         project_root = Path(__file__).resolve().parents[3]
-        map_html_path = project_root / "outputs" / "maps" / "ccaa_map_opportunity_score.html"
         boundaries_path = project_root / "data" / "raw" / "ccaa_boundaries.geojson"
-        score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
         hospital_path = project_root / "data" / "processed" / "ccaa_hospital_summary.csv"
         flags_dir = project_root / "app" / "assets" / "fotos"
+
+        qp_disease = st.query_params.get("disease")
+        if isinstance(qp_disease, list):
+            qp_disease = qp_disease[0]
+        disease_options = [
+            "Obesity",
+            "Tabaquismo",
+            "Diabetes",
+            "Cardiovascular",
+            "Respiratory",
+            "Oncology",
+        ]
+        selected_disease = str(qp_disease or "Obesity") if str(qp_disease or "").strip() in disease_options else "Obesity"
+
+        disease_norm = self._norm_text(selected_disease)
+        # Use the same interactive base map for all diseases (visual layer),
+        # while selecting disease-specific score CSVs for data-driven panels.
+        map_html_path = project_root / "outputs" / "maps" / "ccaa_map_opportunity_score.html"
+        if any(term in disease_norm for term in ("smoking", "smoke", "tabaquismo", "tabaco", "fumador", "fumadores")):
+            score_path = project_root / "data" / "processed" / "ccaa_smoking_opportunity_score.csv"
+        else:
+            score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
+
+        # Human-friendly disease label for the KPI formula (Spanish terms where appropriate)
+        formula_disease_map = {
+            "obesity": "obesidad",
+            "smoking": "tabaquismo",
+            "tabaquismo": "tabaquismo",
+            "diabetes": "diabetes",
+            "cardiovascular": "cardiovascular",
+            "respiratory": "respiratorio",
+            "oncology": "oncología",
+        }
+        formula_disease_key = None
+        for key in formula_disease_map.keys():
+            if key in disease_norm:
+                formula_disease_key = key
+                break
+        formula_disease_label = formula_disease_map.get(formula_disease_key, selected_disease.lower())
+
+        disease_selector_html = "".join(
+            (
+                f'<a class="disease-pill{" active" if option == selected_disease else ""}" '
+                f'href="{html_lib.escape(build_view_href("overview_map", {"disease": option}), quote=True)}">'
+                f'{html_lib.escape(option)}</a>'
+            )
+            for option in disease_options
+        )
+
+        st.markdown(
+            f"""
+            <div class="overview-disease-switcher">
+                <div class="disease-switcher-label">Disease</div>
+                <div class="disease-switcher-row">
+                    {disease_selector_html}
+                </div>
+                <div class="disease-switcher-note">Selecciona una enfermedad para recargar el panel con su propio dataset.</div>
+            </div>
+            <style>
+            .overview-disease-switcher {{
+                margin: 0.25rem 0 0.35rem 0;
+                padding: 6px 10px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                border: 1px solid {palette['card_border']};
+                border-radius: 14px;
+                background: color-mix(in srgb, {palette['panel_bg']} 82%, transparent);
+                backdrop-filter: blur(4px);
+                box-shadow: 0 6px 18px rgba(15,23,42,0.10);
+            }}
+            .disease-switcher-label {{
+                font-size: 0.64rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: {palette['label_color']};
+                font-weight: 700;
+                margin: 0;
+                padding-right: 8px;
+                white-space: nowrap;
+            }}
+            .disease-switcher-row {{
+                display: flex;
+                flex-wrap: nowrap;
+                gap: 8px;
+                align-items: center;
+            }}
+            .disease-pill {{
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 4px 8px; /* narrower */
+                border-radius: 999px;
+                border: 1px solid {palette['surface_border']};
+                background: {palette['surface_bg']};
+                color: {palette['surface_text']};
+                text-decoration: none !important; /* force remove underline */
+                font-size: 0.74rem; /* slightly smaller */
+                font-weight: 700;
+                line-height: 1;
+                transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+            }}
+            .disease-pill:hover {{
+                transform: translateY(-1px);
+                border-color: {palette['accent']};
+            }}
+            .disease-pill.active {{
+                background: linear-gradient(135deg, {palette['accent']} 0%, {palette['accent']}cc 100%);
+                border-color: {palette['accent']};
+                color: #ffffff;
+            }}
+            /* Ensure anchor tags never show underline from global styles */
+            a.disease-pill, .disease-pill {{
+                text-decoration: none !important;
+            }}
+            .disease-switcher-note {{
+                display: none; /* hide explanatory note to keep switcher compact */
+            }}
+            /* Make the external disease pills text not underlined (defensive) */
+            .disease-pill {{
+                text-decoration: none;
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
         overview_panel = st.container(key="overview_map_panel")
         with overview_panel:
             if not map_html_path.exists() or not score_path.exists() or not hospital_path.exists():
-                st.error("Faltan archivos para construir el Overview. Revisa outputs/maps y data/processed.")
+                st.error("Faltan archivos para construir el Overview de la enfermedad seleccionada. Revisa outputs/maps y data/processed.")
                 return
 
             score_df = pd.read_csv(score_path)
@@ -162,13 +287,13 @@ class OverviewMapView:
             ccaa_flag_by_norm = self._build_local_flag_map(flags_dir)
 
             code_to_ccaa = self._build_code_to_ccaa_map(score_df, boundaries_path)
-            detail_base_href = build_view_href("ccaa_detail")
+            detail_base_href = build_view_href("ccaa_detail", {"disease": selected_disease})
 
             rows_html = []
             for _, row in ranking_df.iterrows():
                 ccaa_name = str(row["CCAA"])
                 ccaa_flag_url = ccaa_flag_by_norm.get(self._norm_text(ccaa_name), fallback_flag_url)
-                detail_href = build_view_href("ccaa_detail", {"ccaa": ccaa_name})
+                detail_href = build_view_href("ccaa_detail", {"ccaa": ccaa_name, "disease": selected_disease})
                 rows_html.append(
                     "<tr>"
                     "<td class='ccaa-cell'>"
@@ -185,16 +310,9 @@ class OverviewMapView:
                 )
             table_rows = "".join(rows_html)
 
-            disease_options = [
-                "Obesity",
-                "Diabetes",
-                "Cardiovascular",
-                "Respiratory",
-                "Oncology",
-            ]
             disease_options_html = "".join(
                 f'<option value="{html_lib.escape(option)}"'
-                + (" selected" if option == "Obesity" else "")
+                + (" selected" if option == selected_disease else "")
                 + f'>{html_lib.escape(option)}</option>'
                 for option in disease_options
             )
@@ -337,24 +455,40 @@ html, body {{
 }}
 .disease-panel {{
     position: absolute;
-    top: 112px;
+    top: 88px; /* moved slightly lower */
     left: 50px;
     z-index: 25;
-    min-width: 164px;
+    min-width: 140px; /* narrower */
+    max-width: 240px;
+    height: 44px; /* compact fixed height */
     background: color-mix(in srgb, {palette['panel_bg']} 76%, transparent);
     border: 1px solid {palette['card_border']};
     border-radius: 10px;
-    padding: 6px 8px;
+    padding: 2px 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
     box-shadow: 0 6px 18px rgba(15,23,42,0.12);
     backdrop-filter: blur(4px);
 }}
 .disease-panel-label {{
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     color: {palette['label_color']};
     font-weight: 700;
-    margin-bottom: 4px;
+    margin: 0;
+    line-height: 1;
+}}
+.disease-panel-value {{
+    font-size: 0.82rem;
+    font-weight: 800; /* bold disease name */
+    margin: 0;
+    padding: 0;
+    color: {palette['title_color']};
+    text-decoration: none !important;
+    line-height: 1;
 }}
 .disease-panel select {{
     width: 100%;
@@ -362,15 +496,13 @@ html, body {{
     border-radius: 8px;
     background: {palette['surface_bg']};
     color: {palette['surface_text']};
-    font-size: 0.86rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    padding: 4px 6px;
+    padding: 2px 6px;
     outline: none;
 }}
 .disease-panel-note {{
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: {palette['muted_text']};
+    display: none; /* hidden to keep panel compact */
 }}
 .map-legend-panel {{
     position: absolute;
@@ -578,10 +710,8 @@ html, body {{
 
     <div class="disease-panel">
         <div class="disease-panel-label">Disease</div>
-        <select aria-label="Disease selector">
-            {disease_options_html}
-        </select>
-        <div class="disease-panel-note">Ready to connect disease-specific layers.</div>
+        <div class="disease-panel-value">{html_lib.escape(selected_disease)}</div>
+        <div class="disease-panel-note">Dataset activo para el panel actual.</div>
     </div>
 
     <div class="map-legend-panel" role="note" aria-label="KPI legend">
@@ -595,7 +725,7 @@ html, body {{
             Azul más oscuro = mayor oportunidad estimada para la CCAA.
         </div>
         <div class="map-legend-formula">
-            KPI = 45% mercado per cápita (12m) + 35% obesidad + 20% camas/100k,
+            KPI = 45% mercado per cápita (12m) + 35% <strong>{html_lib.escape(formula_disease_label)}</strong> + 20% camas/100k,
             tras normalizar cada variable entre 0 y 1 (min-max) y escalar a 0-100.
         </div>
     </div>

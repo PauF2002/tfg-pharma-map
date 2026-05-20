@@ -396,15 +396,38 @@ class CcaaDetailView:
         palette = get_embedded_theme_palette()
 
         project_root = Path(__file__).resolve().parents[3]
-        map_html_path = project_root / "outputs" / "maps" / "ccaa_map_opportunity_score.html"
         boundaries_path = project_root / "data" / "raw" / "ccaa_boundaries.geojson"
         hospitals_path = project_root / "data" / "raw" / "CNH_2024_geocoded.csv"
-        score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
         market_path = project_root / "data" / "processed" / "ccaa_market_monthly.csv"
         flags_dir = project_root / "app" / "assets" / "fotos"
 
-        if not score_path.exists() or not market_path.exists():
-            st.error("Faltan archivos para construir el detalle CCAA. Revisa data/processed.")
+        qp_ccaa = st.query_params.get("ccaa")
+        qp_disease = st.query_params.get("disease")
+        if isinstance(qp_ccaa, list):
+            qp_ccaa = qp_ccaa[0]
+        if isinstance(qp_disease, list):
+            qp_disease = qp_disease[0]
+
+        preferred_default = "Comunidad Valenciana"
+        disease_options = [
+            "Obesity",
+            "Tabaquismo",
+            "Diabetes",
+            "Cardiovascular",
+            "Respiratory",
+            "Oncology",
+        ]
+        selected_disease = str(qp_disease or "Obesity") if str(qp_disease or "").strip() in disease_options else "Obesity"
+        disease_norm = self._norm_text(selected_disease)
+        # Keep a single interactive base map for all diseases; swap only the data file
+        map_html_path = project_root / "outputs" / "maps" / "ccaa_map_opportunity_score.html"
+        if any(term in disease_norm for term in ("smoking", "smoke", "tabaquismo", "tabaco", "fumador", "fumadores")):
+            score_path = project_root / "data" / "processed" / "ccaa_smoking_opportunity_score.csv"
+        else:
+            score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
+
+        if not score_path.exists() or not market_path.exists() or not map_html_path.exists():
+            st.error("Faltan archivos para construir el detalle CCAA de la enfermedad seleccionada. Revisa outputs/maps y data/processed.")
             return
 
         score_df = pd.read_csv(score_path)
@@ -414,19 +437,96 @@ class CcaaDetailView:
         if not ccaa_options:
             st.warning("No hay CCAA disponibles para mostrar el detalle.")
             return
-
-        qp_ccaa = st.query_params.get("ccaa")
-        if isinstance(qp_ccaa, list):
-            qp_ccaa = qp_ccaa[0]
-
-        preferred_default = "Comunidad Valenciana"
         fallback_ccaa = preferred_default if preferred_default in ccaa_options else ccaa_options[0]
         selected_qp = qp_ccaa if qp_ccaa in ccaa_options else fallback_ccaa
         selected_ccaa = selected_qp
 
         overview_href = build_view_href("overview_map")
-        target_href = build_view_href("opportunity_pack", {"ccaa": selected_ccaa})
+        target_href = build_view_href("opportunity_pack", {"ccaa": selected_ccaa, "disease": selected_disease})
         detail_base_href = build_view_href("ccaa_detail")
+
+        disease_selector_html = "".join(
+            (
+                f'<a class="ccaa-disease-pill{" active" if option == selected_disease else ""}" '
+                f'href="{html_lib.escape(build_view_href("ccaa_detail", {"ccaa": selected_ccaa, "disease": option}), quote=True)}">'
+                f'{html_lib.escape(option)}</a>'
+            )
+            for option in disease_options
+        )
+
+        st.markdown(
+            f"""
+            <div class="ccaa-disease-switcher">
+                <div class="ccaa-disease-switcher-label">Disease</div>
+                <div class="ccaa-disease-switcher-row">
+                    {disease_selector_html}
+                </div>
+                <div class="ccaa-disease-switcher-note">Selecciona una enfermedad para recargar el detalle y el pack de oportunidad.</div>
+            </div>
+            <style>
+            .ccaa-disease-switcher {{
+                margin: 0.15rem 0 0.35rem 0;
+                padding: 4px 8px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                border: 1px solid {palette['card_border']};
+                border-radius: 14px;
+                background: color-mix(in srgb, {palette['panel_bg']} 82%, transparent);
+                backdrop-filter: blur(4px);
+                box-shadow: 0 6px 18px rgba(15,23,42,0.10);
+            }}
+            .ccaa-disease-switcher-label {{
+                font-size: 0.62rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: {palette['label_color']};
+                font-weight: 700;
+                margin: 0;
+                padding-right: 8px;
+                white-space: nowrap;
+            }}
+            .ccaa-disease-switcher-row {{
+                display: flex;
+                flex-wrap: nowrap;
+                gap: 8px;
+                align-items: center;
+            }}
+            .ccaa-disease-pill {{
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 4px 8px; /* narrower */
+                border-radius: 999px;
+                border: 1px solid {palette['surface_border']};
+                background: {palette['surface_bg']};
+                color: {palette['surface_text']};
+                text-decoration: none !important; /* force remove underline */
+                font-size: 0.74rem; /* slightly smaller */
+                font-weight: 700;
+                line-height: 1;
+                transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+            }}
+            .ccaa-disease-pill:hover {{
+                transform: translateY(-1px);
+                border-color: {palette['accent']};
+            }}
+            .ccaa-disease-pill.active {{
+                background: linear-gradient(135deg, {palette['accent']} 0%, {palette['accent']}cc 100%);
+                border-color: {palette['accent']};
+                color: #ffffff;
+            }}
+            .ccaa-disease-switcher-note {{
+                display: none; /* hide note to keep the switcher compact */
+            }}
+            a.ccaa-disease-pill, .ccaa-disease-pill {{
+                text-decoration: none !important;
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
         selected_row = score_df[score_df["CCAA"] == selected_ccaa]
         if selected_row.empty:
@@ -663,16 +763,9 @@ class CcaaDetailView:
             for name in ccaa_options
         )
 
-        disease_options = [
-            "Obesity",
-            "Diabetes",
-            "Cardiovascular",
-            "Respiratory",
-            "Oncology",
-        ]
         disease_options_html = "".join(
             f'<option value="{html_lib.escape(option)}"'
-            + (" selected" if option == "Obesity" else "")
+            + (" selected" if option == selected_disease else "")
             + f'>{html_lib.escape(option)}</option>'
             for option in disease_options
         )
@@ -802,10 +895,11 @@ html, body {{
 }}
 .disease-panel {{
     position: absolute;
-    top: 130px;
+    top: 130px; /* moved 10px up */
     left: 12px;
     z-index: 25;
-    min-width: 164px;
+    min-width: 120px;
+    max-width: 240px;
     background: {palette['panel_bg']};
     border: 1px solid {palette['card_border']};
     border-radius: 10px;
@@ -836,6 +930,12 @@ html, body {{
     margin-top: 4px;
     font-size: 0.7rem;
     color: {palette['muted_text']};
+}}
+.disease-panel-value {{
+    font-size: 0.9rem;
+    font-weight: 800; /* bold disease name */
+    margin: 0;
+    color: {palette['title_color']};
 }}
 .ccaa-title-box {{
     padding: 8px 12px;
@@ -1560,10 +1660,8 @@ html, body {{
 
         <div class="disease-panel ccaa-floating">
             <div class="disease-panel-label">Disease</div>
-            <select id="disease_selector" aria-label="Disease selector">
-                {disease_options_html}
-            </select>
-            <div class="disease-panel-note">Ready to connect disease-specific layers.</div>
+            <div class="disease-panel-value">{html_lib.escape(selected_disease)}</div>
+            <div class="disease-panel-note">Dataset activo para el detalle actual.</div>
         </div>
 
         <div class="ccaa-kpi-compare-strip ccaa-floating">
@@ -1685,7 +1783,7 @@ html, body {{
     const targetCartCount = document.getElementById("target_cart_count");
     const targetListOpenLink = document.getElementById("target_list_open");
     const targetListSection = document.getElementById("target_list_section");
-    const diseaseSelector = document.getElementById("disease_selector");
+    const selectedDisease = {json.dumps(selected_disease)};
     const ccaaFlagByNorm = {json.dumps(ccaa_flag_by_norm)};
     const fallbackFlagSrc = {json.dumps(fallback_flag_url)};
     const hospitalRows = {json.dumps(hospital_table_rows, ensure_ascii=False)};
@@ -1726,7 +1824,7 @@ html, body {{
         const query = cleanBase.startsWith("?") ? cleanBase.slice(1) : cleanBase;
         const params = new URLSearchParams(query);
         params.set("ccaa", selector ? selector.value : "");
-        params.set("disease", diseaseSelector ? diseaseSelector.value : "Obesity");
+        params.set("disease", selectedDisease || "Obesity");
         params.set("snapshot_date", new Date().toISOString().slice(0, 10));
 
         const selectedIds = targetList

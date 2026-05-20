@@ -16,7 +16,7 @@ def norm_txt(x: str) -> str:
 
 #NOTAS PAU: leemos el csv sin ponerle cabecera
 raw = pd.read_csv(INP, encoding="utf-8-sig", engine="python", header=None)
-#agarro el array entero,por que esta en una linea y esta en [0], lo hago str y con funcion tipo str.strip() le quito espacios 
+#agarro el array entero,por que esta en una linea y esta en [0], lo hago str y cona funcion tipo str.strip() le quito espacios 
 df = raw[0].astype(str).str.strip()
 
 # quitar comillas externas
