@@ -388,6 +388,25 @@ def _load_disease_trend_for_ccaa(project_root: Path, ccaa: str, disease: str) ->
             return pd.DataFrame(columns=["period", "value"])
         return scoped[["period", "value"]].copy()
 
+    if "diabetes" in disease_norm:
+        diabetes_path = project_root / "data" / "processed" / "ccaa_diabetes.csv"
+        diabetes_df = _safe_read_csv(diabetes_path)
+        if diabetes_df.empty:
+            return pd.DataFrame(columns=["period", "value"])
+
+        ccaa_col = "CCAA" if "CCAA" in diabetes_df.columns else diabetes_df.columns[0]
+        value_col = "diabetes_val" if "diabetes_val" in diabetes_df.columns else diabetes_df.columns[-1]
+        period_col = "period" if "period" in diabetes_df.columns else None
+
+        scoped = diabetes_df.copy()
+        scoped["ccaa_norm"] = scoped[ccaa_col].map(_canonical_ccaa_norm)
+        scoped["value"] = pd.to_numeric(scoped[value_col], errors="coerce")
+        scoped["period"] = scoped[period_col].astype(str) if period_col else "latest"
+        scoped = scoped[scoped["ccaa_norm"] == selected_norm].dropna(subset=["value"])
+        if scoped.empty:
+            return pd.DataFrame(columns=["period", "value"])
+        return scoped[["period", "value"]].copy()
+
     if "epilepsia" in disease_norm or "epilepsy" in disease_norm:
         epi_path = project_root / "data" / "processed" / "ccaa_epilepsia.csv"
         epi_df = _safe_read_csv(epi_path)
@@ -572,6 +591,9 @@ def _load_ccaa_metrics(project_root: Path, disease: str) -> pd.DataFrame:
         score_path = project_root / "data" / "processed" / "ccaa_alzheimer_opportunity_score.csv"
     elif "epilepsia" in disease_norm or "epilepsy" in disease_norm:
         score_path = project_root / "data" / "processed" / "ccaa_epilepsia_opportunity_score.csv"
+    elif "diabetes" in disease_norm:
+        diabetes_path = project_root / "data" / "processed" / "ccaa_diabetes_opportunity_score.csv"
+        score_path = diabetes_path if diabetes_path.exists() else project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
     else:
         score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
     score_df = _safe_read_csv(score_path)

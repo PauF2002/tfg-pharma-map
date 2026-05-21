@@ -152,6 +152,9 @@ class OverviewMapView:
             score_path = project_root / "data" / "processed" / "ccaa_alzheimer_opportunity_score.csv"
         elif "epilepsia" in disease_norm or "epilepsy" in disease_norm:
             score_path = project_root / "data" / "processed" / "ccaa_epilepsia_opportunity_score.csv"
+        elif "diabetes" in disease_norm:
+            diabetes_path = project_root / "data" / "processed" / "ccaa_diabetes_opportunity_score.csv"
+            score_path = diabetes_path if diabetes_path.exists() else project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
         else:
             score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
 
