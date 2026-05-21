@@ -133,6 +133,8 @@ class OverviewMapView:
         disease_options = [
             "Obesity",
             "Tabaquismo",
+            "Alzheimer",
+            "Epilepsia",
             "Diabetes",
             "Cardiovascular",
             "Respiratory",
@@ -146,6 +148,10 @@ class OverviewMapView:
         map_html_path = project_root / "outputs" / "maps" / "ccaa_map_opportunity_score.html"
         if any(term in disease_norm for term in ("smoking", "smoke", "tabaquismo", "tabaco", "fumador", "fumadores")):
             score_path = project_root / "data" / "processed" / "ccaa_smoking_opportunity_score.csv"
+        elif "alzheimer" in disease_norm:
+            score_path = project_root / "data" / "processed" / "ccaa_alzheimer_opportunity_score.csv"
+        elif "epilepsia" in disease_norm or "epilepsy" in disease_norm:
+            score_path = project_root / "data" / "processed" / "ccaa_epilepsia_opportunity_score.csv"
         else:
             score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
 
@@ -154,6 +160,7 @@ class OverviewMapView:
             "obesity": "obesidad",
             "smoking": "tabaquismo",
             "tabaquismo": "tabaquismo",
+            "alzheimer": "alzheimer",
             "diabetes": "diabetes",
             "cardiovascular": "cardiovascular",
             "respiratory": "respiratorio",
@@ -280,6 +287,19 @@ class OverviewMapView:
             ranking_df["KPI"] = ranking_df["KPI"].round(2)
             ranking_df["Beds"] = ranking_df["Beds"].round(2)
             ranking_df["Market"] = ranking_df["Market"].round(2)
+
+            obesity_pct_by_ccaa: dict[str, float] = {}
+            obesity_score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
+            if obesity_score_path.exists():
+                obesity_df = pd.read_csv(obesity_score_path)
+                if "CCAA" in obesity_df.columns and "obesity_pct" in obesity_df.columns:
+                    obesity_clean = obesity_df[["CCAA", "obesity_pct"]].copy()
+                    obesity_clean["obesity_pct"] = pd.to_numeric(obesity_clean["obesity_pct"], errors="coerce")
+                    obesity_pct_by_ccaa = {
+                        str(row["CCAA"]): float(row["obesity_pct"])
+                        for _, row in obesity_clean.dropna(subset=["obesity_pct"]).iterrows()
+                    }
+
             kpi_min = float(ranking_df["KPI"].min()) if not ranking_df.empty else 0.0
             kpi_max = float(ranking_df["KPI"].max()) if not ranking_df.empty else 0.0
 
@@ -309,6 +329,16 @@ class OverviewMapView:
                     "</tr>"
                 )
             table_rows = "".join(rows_html)
+            score_by_ccaa = {str(row["CCAA"]): float(row["KPI"]) for _, row in ranking_df.iterrows()}
+            metrics_by_ccaa = {
+                str(row["CCAA"]): {
+                    "kpi": float(row["KPI"]),
+                    "beds": float(row["Beds"]),
+                    "market": float(row["Market"]),
+                    "obesity_pct": obesity_pct_by_ccaa.get(str(row["CCAA"])),
+                }
+                for _, row in ranking_df.iterrows()
+            }
 
             disease_options_html = "".join(
                 f'<option value="{html_lib.escape(option)}"'
@@ -323,6 +353,60 @@ class OverviewMapView:
 (function() {{
     const detailBaseHref = {json.dumps(detail_base_href)};
     const codeToCcaa = {json.dumps(code_to_ccaa, ensure_ascii=False)};
+    const scoreByCcaaRaw = {json.dumps(score_by_ccaa, ensure_ascii=False)};
+    const metricsByCcaaRaw = {json.dumps(metrics_by_ccaa, ensure_ascii=False)};
+
+    const normalize = (value) => String(value || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/-/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const scoreByCcaa = Object.fromEntries(
+        Object.entries(scoreByCcaaRaw).map(([k, v]) => [normalize(k), Number(v)])
+    );
+    const metricsByCcaa = Object.fromEntries(
+        Object.entries(metricsByCcaaRaw).map(([k, v]) => [normalize(k), v])
+    );
+    const scoreValues = Object.values(scoreByCcaa).filter((v) => Number.isFinite(v));
+    const minScore = scoreValues.length ? Math.min(...scoreValues) : 0;
+    const maxScore = scoreValues.length ? Math.max(...scoreValues) : 100;
+
+    const hexToRgb = (hex) => {{
+        const c = String(hex || "").replace("#", "");
+        const full = c.length === 3 ? c.split("").map((x) => x + x).join("") : c;
+        return [
+            parseInt(full.slice(0, 2), 16),
+            parseInt(full.slice(2, 4), 16),
+            parseInt(full.slice(4, 6), 16),
+        ];
+    }};
+
+    const rgbToHex = (r, g, b) =>
+        `#${{[r, g, b]
+            .map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0"))
+            .join("")}}`;
+
+    const blend = (fromHex, toHex, t) => {{
+        const a = hexToRgb(fromHex);
+        const b = hexToRgb(toHex);
+        const tt = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
+        return rgbToHex(
+            a[0] + (b[0] - a[0]) * tt,
+            a[1] + (b[1] - a[1]) * tt,
+            a[2] + (b[2] - a[2]) * tt,
+        );
+    }};
+
+    const scoreToColor = (score) => {{
+        if (!Number.isFinite(score)) return "#cbd5e1";
+        const span = maxScore - minScore;
+        const t = span > 0 ? (score - minScore) / span : 0.5;
+        // Original blue gradient
+        return blend("#dbeafe", "#1d4ed8", t);
+    }};
 
     const getMapInstance = () => {{
         const mapKey = Object.keys(window).find((key) => key.startsWith("map_") && window[key] && typeof window[key].eachLayer === "function");
@@ -352,6 +436,75 @@ class OverviewMapView:
         return "";
     }};
 
+    const applyChoroplethStyle = (layer) => {{
+        if (!layer || !layer.feature || !layer.feature.properties || typeof layer.setStyle !== "function") return;
+        const ccaaName = resolveCcaaName(layer.feature.properties);
+        const score = scoreByCcaa[normalize(ccaaName)];
+        const fillColor = scoreToColor(score);
+        layer.setStyle({{
+            color: "#3b82f6",
+            weight: 2,
+            opacity: 0.95,
+            fillColor,
+            fillOpacity: 0.68,
+        }});
+    }};
+
+    const bindDiseaseTooltip = (layer, ccaaName) => {{
+        if (!layer) return;
+        const metric = metricsByCcaa[normalize(ccaaName)] || null;
+        const kpiText = metric && Number.isFinite(Number(metric.kpi)) ? Number(metric.kpi).toFixed(2) : "N/A";
+        const bedsText = metric && Number.isFinite(Number(metric.beds)) ? Number(metric.beds).toFixed(2) : "N/A";
+        const marketText = metric && Number.isFinite(Number(metric.market)) ? Number(metric.market).toFixed(2) : "N/A";
+        const obesityText = metric && Number.isFinite(Number(metric.obesity_pct)) ? Number(metric.obesity_pct).toFixed(1) : "N/A";
+        const html = [
+            "<div style='min-width:220px'>",
+            `<div style='font-weight:700;margin-bottom:6px'>${{ccaaName || "CCAA"}}</div>`,
+            `<div><strong>KPI</strong> ${{kpiText}}</div>`,
+            `<div><strong>Beds / 100k</strong> ${{bedsText}}</div>`,
+            `<div><strong>Market € / cap (12m avg)</strong> ${{marketText}}</div>`,
+            `<div><strong>Obesity % (latest)</strong> ${{obesityText}}</div>`,
+            "</div>",
+        ].join("");
+
+        if (typeof layer.off === "function") {{
+            layer.off("mouseover");
+            layer.off("mouseout");
+            layer.off("mousemove");
+        }}
+        if (typeof layer.unbindTooltip === "function") layer.unbindTooltip();
+        if (typeof layer.unbindPopup === "function") layer.unbindPopup();
+        if (typeof layer.bindTooltip === "function") {{
+            layer.bindTooltip(html, {{
+                sticky: true,
+                direction: "top",
+                opacity: 0.95,
+                className: "disease-tooltip",
+            }});
+        }}
+    }};
+
+    const installLegacyHoverBlockers = (map) => {{
+        if (!map || map.__legacyHoverBlocked) return;
+        map.__legacyHoverBlocked = true;
+
+        const styleId = "overview-hover-blockers";
+        if (!document.getElementById(styleId)) {{
+            const styleTag = document.createElement("style");
+            styleTag.id = styleId;
+            styleTag.textContent = `
+                .leaflet-tooltip {{ display: none !important; }}
+                .leaflet-tooltip.disease-tooltip {{ display: block !important; }}
+                .leaflet-popup {{ display: none !important; }}
+            `;
+            document.head.appendChild(styleTag);
+        }}
+
+        map.on("popupopen", (event) => {{
+            if (event && event.popup) map.closePopup(event.popup);
+        }});
+    }};
+
     const attachClickToLayer = (layer) => {{
         if (!layer || !layer.feature || !layer.feature.properties || typeof layer.on !== "function") return;
         if (layer.__ccaaClickBound) return;
@@ -368,14 +521,30 @@ class OverviewMapView:
                 element.style.cursor = "pointer";
             }}
         }}
+
+        applyChoroplethStyle(layer);
+        const ccaaName = resolveCcaaName(layer.feature.properties);
+        bindDiseaseTooltip(layer, ccaaName);
+    }};
+
+    const visitFeatureLayers = (rootLayer, visitor) => {{
+        if (!rootLayer) return;
+        if (rootLayer.feature && rootLayer.feature.properties) {{
+            visitor(rootLayer);
+        }}
+        if (typeof rootLayer.eachLayer === "function") {{
+            rootLayer.eachLayer((child) => visitFeatureLayers(child, visitor));
+        }}
     }};
 
     const wireMapClicks = () => {{
         const map = getMapInstance();
         if (!map) return;
 
-        map.eachLayer((layer) => attachClickToLayer(layer));
-        map.on("layeradd", (event) => attachClickToLayer(event.layer));
+        installLegacyHoverBlockers(map);
+
+        map.eachLayer((layer) => visitFeatureLayers(layer, attachClickToLayer));
+        map.on("layeradd", (event) => visitFeatureLayers(event.layer, attachClickToLayer));
     }};
 
     if (document.readyState === "loading") {{

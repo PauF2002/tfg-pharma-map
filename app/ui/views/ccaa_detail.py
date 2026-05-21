@@ -138,6 +138,7 @@ class CcaaDetailView:
         selected_ccaa: str,
         selected_code: str,
         palette: dict[str, str],
+        metrics_by_ccaa: dict[str, dict[str, float | None]],
         hospital_points: list[dict[str, object]],
     ) -> str:
         selected_name_norm = cls._norm_text(selected_ccaa)
@@ -147,6 +148,7 @@ class CcaaDetailView:
 (function() {{
     const selectedCode = {json.dumps(selected_code.zfill(2) if selected_code else "")};
     const selectedNameNorm = {json.dumps(selected_name_norm)};
+    const metricsByCcaaRaw = {json.dumps(metrics_by_ccaa, ensure_ascii=False)};
     const hospitalPoints = {json.dumps(hospital_points)};
     const accentColor = {json.dumps(palette['accent'])};
     const mutedBorder = {json.dumps(palette['card_border'])};
@@ -159,6 +161,10 @@ class CcaaDetailView:
         .replace(/-/g, " ")
         .replace(/\s+/g, " ")
         .trim();
+
+    const metricsByCcaa = Object.fromEntries(
+        Object.entries(metricsByCcaaRaw).map(([k, v]) => [normalize(k), v])
+    );
 
     const getMapInstance = () => {{
         const key = Object.keys(window).find((k) => k.startsWith("map_") && window[k] && typeof window[k].eachLayer === "function");
@@ -173,6 +179,63 @@ class CcaaDetailView:
         }}
     }};
 
+    const bindDiseaseTooltip = (layer, ccaaName) => {{
+        if (!layer) return;
+        const metric = metricsByCcaa[normalize(ccaaName)] || null;
+        const kpiText = metric && Number.isFinite(Number(metric.kpi)) ? Number(metric.kpi).toFixed(2) : "N/A";
+        const bedsText = metric && Number.isFinite(Number(metric.beds)) ? Number(metric.beds).toFixed(2) : "N/A";
+        const marketText = metric && Number.isFinite(Number(metric.market)) ? Number(metric.market).toFixed(2) : "N/A";
+        const obesityText = metric && Number.isFinite(Number(metric.obesity_pct)) ? Number(metric.obesity_pct).toFixed(1) : "N/A";
+        const html = [
+            "<div style='min-width:220px'>",
+            `<div style='font-weight:700;margin-bottom:6px'>${{ccaaName || "CCAA"}}</div>`,
+            `<div><strong>KPI</strong> ${{kpiText}}</div>`,
+            `<div><strong>Beds / 100k</strong> ${{bedsText}}</div>`,
+            `<div><strong>Market € / cap (12m avg)</strong> ${{marketText}}</div>`,
+            `<div><strong>Obesity % (latest)</strong> ${{obesityText}}</div>`,
+            "</div>",
+        ].join("");
+
+        if (typeof layer.off === "function") {{
+            layer.off("mouseover");
+            layer.off("mouseout");
+            layer.off("mousemove");
+        }}
+        if (typeof layer.unbindTooltip === "function") layer.unbindTooltip();
+        if (typeof layer.unbindPopup === "function") layer.unbindPopup();
+        if (typeof layer.bindTooltip === "function") {{
+            layer.bindTooltip(html, {{
+                sticky: true,
+                direction: "top",
+                opacity: 0.95,
+                className: "disease-tooltip",
+            }});
+        }}
+    }};
+
+    const installLegacyHoverBlockers = (map) => {{
+        if (!map || map.__legacyHoverBlocked) return;
+        map.__legacyHoverBlocked = true;
+
+        const styleId = "ccaa-detail-hover-blockers";
+        if (!document.getElementById(styleId)) {{
+            const styleTag = document.createElement("style");
+            styleTag.id = styleId;
+            styleTag.textContent = `
+                .leaflet-tooltip {{ display: none !important; }}
+                .leaflet-tooltip.disease-tooltip {{ display: block !important; }}
+            `;
+            document.head.appendChild(styleTag);
+        }}
+
+        map.on("popupopen", (event) => {{
+            const source = event && event.popup ? event.popup._source : null;
+            if (source && source.feature && source.feature.properties) {{
+                map.closePopup(event.popup);
+            }}
+        }});
+    }};
+
     const styleLayers = (map) => {{
         let selectedBounds = null;
         let selectedCCAAName = null;
@@ -184,6 +247,18 @@ class CcaaDetailView:
             const code = String(props.cod_ccaa || "").trim().padStart(2, "0");
             const nameNorm = normalize(props.CCAA || props.ccaa || props.name || props.noml_ccaa || props.nombre || "");
             const isSelected = (selectedCode && code === selectedCode) || (selectedNameNorm && nameNorm === selectedNameNorm);
+
+            // Remove legacy hover handlers/tooltips coming from the base HTML map.
+            if (typeof layer.off === "function") {{
+                layer.off("mouseover");
+                layer.off("mouseout");
+                layer.off("mousemove");
+            }}
+            if (typeof layer.unbindTooltip === "function") layer.unbindTooltip();
+            if (typeof layer.unbindPopup === "function") layer.unbindPopup();
+
+            const ccaaLabel = props.CCAA || props.ccaa || props.name || props.noml_ccaa || props.nombre || "CCAA";
+            bindDiseaseTooltip(layer, ccaaLabel);
 
             if (isSelected) {{
                 selectedCCAAName = props.CCAA || props.ccaa || props.name || props.noml_ccaa || props.nombre || null;
@@ -364,6 +439,8 @@ class CcaaDetailView:
         const map = getMapInstance();
         if (!map) return;
 
+        installLegacyHoverBlockers(map);
+
         const result = styleLayers(map);
         configureStaticMap(map, result.bounds, result.ccaaName);
         addHospitalMarkers(map);
@@ -412,6 +489,8 @@ class CcaaDetailView:
         disease_options = [
             "Obesity",
             "Tabaquismo",
+            "Alzheimer",
+            "Epilepsia",
             "Diabetes",
             "Cardiovascular",
             "Respiratory",
@@ -423,6 +502,10 @@ class CcaaDetailView:
         map_html_path = project_root / "outputs" / "maps" / "ccaa_map_opportunity_score.html"
         if any(term in disease_norm for term in ("smoking", "smoke", "tabaquismo", "tabaco", "fumador", "fumadores")):
             score_path = project_root / "data" / "processed" / "ccaa_smoking_opportunity_score.csv"
+        elif "alzheimer" in disease_norm:
+            score_path = project_root / "data" / "processed" / "ccaa_alzheimer_opportunity_score.csv"
+        elif "epilepsia" in disease_norm or "epilepsy" in disease_norm:
+            score_path = project_root / "data" / "processed" / "ccaa_epilepsia_opportunity_score.csv"
         else:
             score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
 
@@ -688,6 +771,41 @@ class CcaaDetailView:
         score_name_to_code = self._build_score_name_to_code_map(score_df, boundaries_path)
         selected_code = score_name_to_code.get(selected_ccaa, "")
 
+        obesity_pct_by_ccaa: dict[str, float] = {}
+        obesity_score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
+        if obesity_score_path.exists():
+            obesity_df = pd.read_csv(obesity_score_path)
+            if "CCAA" in obesity_df.columns and "obesity_pct" in obesity_df.columns:
+                obesity_clean = obesity_df[["CCAA", "obesity_pct"]].copy()
+                obesity_clean["obesity_pct"] = pd.to_numeric(obesity_clean["obesity_pct"], errors="coerce")
+                obesity_pct_by_ccaa = {
+                    str(row["CCAA"]): float(row["obesity_pct"])
+                    for _, row in obesity_clean.dropna(subset=["obesity_pct"]).iterrows()
+                }
+
+        metrics_by_ccaa = {}
+        if all(
+            col in score_df.columns
+            for col in ["CCAA", "opportunity_score", "beds_per_100k", "market_12m_avg_eur_per_capita"]
+        ):
+            metric_df = score_df[
+                ["CCAA", "opportunity_score", "beds_per_100k", "market_12m_avg_eur_per_capita"]
+            ].copy()
+            metric_df["opportunity_score"] = pd.to_numeric(metric_df["opportunity_score"], errors="coerce")
+            metric_df["beds_per_100k"] = pd.to_numeric(metric_df["beds_per_100k"], errors="coerce")
+            metric_df["market_12m_avg_eur_per_capita"] = pd.to_numeric(
+                metric_df["market_12m_avg_eur_per_capita"], errors="coerce"
+            )
+            metrics_by_ccaa = {
+                str(row["CCAA"]): {
+                    "kpi": float(row["opportunity_score"]) if pd.notna(row["opportunity_score"]) else None,
+                    "beds": float(row["beds_per_100k"]) if pd.notna(row["beds_per_100k"]) else None,
+                    "market": float(row["market_12m_avg_eur_per_capita"]) if pd.notna(row["market_12m_avg_eur_per_capita"]) else None,
+                    "obesity_pct": obesity_pct_by_ccaa.get(str(row["CCAA"])),
+                }
+                for _, row in metric_df.iterrows()
+            }
+
         hospital_points: list[dict[str, object]] = []
         hospital_table_rows: list[dict[str, object]] = []
         if hospitals_path.exists():
@@ -746,6 +864,7 @@ class CcaaDetailView:
                 selected_ccaa=selected_ccaa,
                 selected_code=selected_code,
                 palette=palette,
+                metrics_by_ccaa=metrics_by_ccaa,
                 hospital_points=hospital_points,
             )
             snapshot_map_srcdoc = html_lib.escape(snapshot_map_html, quote=True)

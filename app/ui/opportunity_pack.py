@@ -369,6 +369,44 @@ def _load_disease_trend_for_ccaa(project_root: Path, ccaa: str, disease: str) ->
         scoped = scoped.sort_values("period")
         return scoped[["period", "value"]].copy()
 
+    if "alzheimer" in disease_norm:
+        alzheimer_path = project_root / "data" / "processed" / "ccaa_alzheimer.csv"
+        alzheimer_df = _safe_read_csv(alzheimer_path)
+        if alzheimer_df.empty:
+            return pd.DataFrame(columns=["period", "value"])
+
+        ccaa_col = "CCAA" if "CCAA" in alzheimer_df.columns else alzheimer_df.columns[0]
+        value_col = "alzheimer_val" if "alzheimer_val" in alzheimer_df.columns else alzheimer_df.columns[-1]
+        period_col = "period" if "period" in alzheimer_df.columns else None
+
+        scoped = alzheimer_df.copy()
+        scoped["ccaa_norm"] = scoped[ccaa_col].map(_canonical_ccaa_norm)
+        scoped["value"] = pd.to_numeric(scoped[value_col], errors="coerce")
+        scoped["period"] = scoped[period_col].astype(str) if period_col else "latest"
+        scoped = scoped[scoped["ccaa_norm"] == selected_norm].dropna(subset=["value"]) 
+        if scoped.empty:
+            return pd.DataFrame(columns=["period", "value"])
+        return scoped[["period", "value"]].copy()
+
+    if "epilepsia" in disease_norm or "epilepsy" in disease_norm:
+        epi_path = project_root / "data" / "processed" / "ccaa_epilepsia.csv"
+        epi_df = _safe_read_csv(epi_path)
+        if epi_df.empty:
+            return pd.DataFrame(columns=["period", "value"])
+
+        ccaa_col = "CCAA" if "CCAA" in epi_df.columns else epi_df.columns[0]
+        value_col = "epilepsia_val" if "epilepsia_val" in epi_df.columns else epi_df.columns[-1]
+        period_col = "period" if "period" in epi_df.columns else None
+
+        scoped = epi_df.copy()
+        scoped["ccaa_norm"] = scoped[ccaa_col].map(_canonical_ccaa_norm)
+        scoped["value"] = pd.to_numeric(scoped[value_col], errors="coerce")
+        scoped["period"] = scoped[period_col].astype(str) if period_col else "latest"
+        scoped = scoped[scoped["ccaa_norm"] == selected_norm].dropna(subset=["value"]) 
+        if scoped.empty:
+            return pd.DataFrame(columns=["period", "value"])
+        return scoped[["period", "value"]].copy()
+
     if any(term in disease_norm for term in ("smoking", "smoke", "tabaquismo", "tabaco", "fumador", "fumadores")):
         smoking_path = project_root / "data" / "processed" / "ccaa_smoking.csv"
         smoking_df = _safe_read_csv(smoking_path)
@@ -530,6 +568,10 @@ def _load_ccaa_metrics(project_root: Path, disease: str) -> pd.DataFrame:
     disease_norm = _norm_text(disease)
     if any(term in disease_norm for term in ("smoking", "smoke", "tabaquismo", "tabaco", "fumador", "fumadores")):
         score_path = project_root / "data" / "processed" / "ccaa_smoking_opportunity_score.csv"
+    elif "alzheimer" in disease_norm:
+        score_path = project_root / "data" / "processed" / "ccaa_alzheimer_opportunity_score.csv"
+    elif "epilepsia" in disease_norm or "epilepsy" in disease_norm:
+        score_path = project_root / "data" / "processed" / "ccaa_epilepsia_opportunity_score.csv"
     else:
         score_path = project_root / "data" / "processed" / "ccaa_opportunity_score.csv"
     score_df = _safe_read_csv(score_path)
@@ -646,6 +688,27 @@ def _build_therapeutic_block(disease: str) -> tuple[str, pd.DataFrame]:
                 {"molecule": "Inclisirán", "therapy_line": "2L", "potential_medication": "siRNA LDL-C", "commercial_note": "Atractivo en prevención secundaria"},
                 {"molecule": "Sacubitrilo/Valsartán", "therapy_line": "1L/2L", "potential_medication": "ARNI", "commercial_note": "Consolidar en protocolos IC"},
                 {"molecule": "Rivaroxabán", "therapy_line": "1L", "potential_medication": "DOAC", "commercial_note": "Mantenimiento y expansión"},
+            ],
+        ),
+        "alzheimer": (
+            "Oportunidad en manejo de enfermedad de Alzheimer: tratamiento sintomático, manejo cognitivo y avances en terapias dirigidas a agregados amiloides y tau.",
+            [
+                {"molecule": "Donepezilo", "therapy_line": "1L", "potential_medication": "Inhibidor de la colinesterasa", "commercial_note": "Uso amplio en unidades de neurología y memoria"},
+                {"molecule": "Rivastigmina", "therapy_line": "1L", "potential_medication": "Inhibidor de la colinesterasa", "commercial_note": "Alternativa en pacientes con tolerancia variable"},
+                {"molecule": "Galantamina", "therapy_line": "1L", "potential_medication": "Inhibidor de la colinesterasa", "commercial_note": "Presencia en protocolos de cuidados cognitivos"},
+                {"molecule": "Memantina", "therapy_line": "2L", "potential_medication": "Antagonista NMDA", "commercial_note": "Indicado en estadios moderados a severos"},
+                {"molecule": "Lecanemab", "therapy_line": "2L", "potential_medication": "mAb anti-amyloid", "commercial_note": "Terapia dirigida; foco en centros con capacidad para monitorización radiológica"},
+                {"molecule": "Aducanumab", "therapy_line": "2L", "potential_medication": "mAb anti-amyloid", "commercial_note": "Opcional en entornos con programas de acceso y seguimiento"},
+            ],
+        ),
+        "epilepsia": (
+            "Oportunidad en manejo de Epilepsia: control de crisis y optimización de terapias antiepilépticas en unidades neurológicas y centros de referencia.",
+            [
+                {"molecule": "Levetiracetam", "therapy_line": "1L", "potential_medication": "Antiepiléptico de amplio espectro", "commercial_note": "Uso extendido en urgencias y neurología"},
+                {"molecule": "Valproato", "therapy_line": "1L", "potential_medication": "Antiepiléptico clásico", "commercial_note": "Eficaz en múltiples tipos de crisis"},
+                {"molecule": "Carbamazepina", "therapy_line": "1L", "potential_medication": "Antiepiléptico", "commercial_note": "Preferido en crisis focales"},
+                {"molecule": "Lamotrigina", "therapy_line": "2L", "potential_medication": "Antiepiléptico", "commercial_note": "Buena tolerabilidad en terapia crónica"},
+                {"molecule": "Lacosamida", "therapy_line": "2L", "potential_medication": "Antiepiléptico adyuvante", "commercial_note": "Uso en pacientes refractarios y unidades especializadas"},
             ],
         ),
     }
