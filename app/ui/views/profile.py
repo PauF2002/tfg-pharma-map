@@ -16,8 +16,8 @@ class ProfileView:
         profile_panel = st.container(key="profile_panel")
         with profile_panel:
             st.markdown(
-                '<div class="main-kicker">PharmaTFG Platform</div>'
-                '<div class="main-title">Profile</div>'
+                '<div class="main-kicker">Plataforma PharmaTFG</div>'
+                '<div class="main-title">Perfil</div>'
                 '<div class="main-text">Gestiona tus datos de cuenta y preferencias de notificaciones.</div>',
                 unsafe_allow_html=True,
             )
@@ -26,9 +26,9 @@ class ProfileView:
                 info_col, pref_col = st.columns(2, gap="large")
 
                 with info_col:
-                    st.subheader("Informacion de cuenta")
+                    st.subheader("Información de cuenta")
                     full_name = st.text_input("Nombre completo", value=current_name)
-                    email = st.text_input("Email", value=current_email)
+                    email = st.text_input("Correo electrónico", value=current_email)
                     role = st.selectbox(
                         "Rol",
                         ["Administrador", "Analista", "Viewer"],
@@ -43,7 +43,7 @@ class ProfileView:
                     notifications = st.checkbox("Recibir notificaciones por email", value=current_notifications)
                     st.caption(
                         f"Tema: {st.session_state.ui_theme_mode} | Acento: {st.session_state.ui_accent_name} | "
-                        f"Tipografia: {st.session_state.ui_font_name}"
+                        f"Tipografía: {st.session_state.ui_font_name}"
                     )
 
                 save_col, cancel_col = st.columns(2)
@@ -54,7 +54,7 @@ class ProfileView:
 
         if save_clicked:
             if not full_name.strip() or not company.strip() or "@" not in email:
-                st.error("Revisa el formulario: nombre, empresa y email valido son obligatorios.")
+                st.error("Revisa el formulario: nombre, empresa y correo electrónico válido son obligatorios.")
             else:
                 save_user_profile(user_id, full_name, email, role, company)
                 save_user_preferences(
@@ -89,4 +89,4 @@ class ProfileView:
                 )
                 st.dataframe(activity_df, use_container_width=True, hide_index=True)
             else:
-                st.caption("Aun no hay actividad registrada para este usuario.")
+                st.caption("Aún no hay actividad registrada para este usuario.")

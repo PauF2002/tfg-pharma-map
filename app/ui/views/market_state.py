@@ -166,8 +166,8 @@ class MarketStateView:
                 with header_left:
                     st.markdown(
                         '<div class="market-copy-center">'
-                        '<div class="market-kicker">&#9679; Live Market Data</div>'
-                        '<div class="market-title">Market State</div>'
+                        '<div class="market-kicker">&#9679; Datos de mercado en vivo</div>'
+                        '<div class="market-title">Estado del mercado</div>'
                         f'<div class="market-subtitle">{selected_subtitle} &mdash; Bolsa de Madrid</div>'
                         '</div>',
                         unsafe_allow_html=True,

@@ -11,8 +11,8 @@ class SettingsView:
         settings_panel = st.container(key="settings_panel")
         with settings_panel:
             st.markdown(
-                '<div class="main-kicker">PharmaTFG Platform</div>'
-                '<div class="main-title">Settings</div>'
+                '<div class="main-kicker">Plataforma PharmaTFG</div>'
+                '<div class="main-title">Configuración</div>'
                 '<div class="main-text" style="margin-bottom:16px;">Personaliza el aspecto de la app: modo oscuro/claro, tipografia y acento.</div>',
                 unsafe_allow_html=True,
             )

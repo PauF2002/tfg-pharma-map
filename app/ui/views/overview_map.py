@@ -131,16 +131,16 @@ class OverviewMapView:
         if isinstance(qp_disease, list):
             qp_disease = qp_disease[0]
         disease_options = [
-            "Obesity",
+            "Obesidad",
             "Tabaquismo",
             "Alzheimer",
             "Epilepsia",
             "Diabetes",
             "Cardiovascular",
-            "Respiratory",
-            "Oncology",
+            "Respiratorio",
+            "Oncologia",
         ]
-        selected_disease = str(qp_disease or "Obesity") if str(qp_disease or "").strip() in disease_options else "Obesity"
+        selected_disease = str(qp_disease or "Obesidad") if str(qp_disease or "").strip() in disease_options else "Obesidad"
 
         disease_norm = self._norm_text(selected_disease)
         # Use the same interactive base map for all diseases (visual layer),
@@ -188,7 +188,7 @@ class OverviewMapView:
         st.markdown(
             f"""
             <div class="overview-disease-switcher">
-                <div class="disease-switcher-label">Disease</div>
+                <div class="disease-switcher-label">Indicador sanitario</div>
                 <div class="disease-switcher-row">
                     {disease_selector_html}
                 </div>
@@ -456,17 +456,17 @@ class OverviewMapView:
     const bindDiseaseTooltip = (layer, ccaaName) => {{
         if (!layer) return;
         const metric = metricsByCcaa[normalize(ccaaName)] || null;
-        const kpiText = metric && Number.isFinite(Number(metric.kpi)) ? Number(metric.kpi).toFixed(2) : "N/A";
-        const bedsText = metric && Number.isFinite(Number(metric.beds)) ? Number(metric.beds).toFixed(2) : "N/A";
-        const marketText = metric && Number.isFinite(Number(metric.market)) ? Number(metric.market).toFixed(2) : "N/A";
-        const obesityText = metric && Number.isFinite(Number(metric.obesity_pct)) ? Number(metric.obesity_pct).toFixed(1) : "N/A";
+        const kpiText = metric && Number.isFinite(Number(metric.kpi)) ? Number(metric.kpi).toFixed(2) : "N/D";
+        const bedsText = metric && Number.isFinite(Number(metric.beds)) ? Number(metric.beds).toFixed(2) : "N/D";
+        const marketText = metric && Number.isFinite(Number(metric.market)) ? Number(metric.market).toFixed(2) : "N/D";
+        const obesityText = metric && Number.isFinite(Number(metric.obesity_pct)) ? Number(metric.obesity_pct).toFixed(1) : "N/D";
         const html = [
             "<div style='min-width:220px'>",
             `<div style='font-weight:700;margin-bottom:6px'>${{ccaaName || "CCAA"}}</div>`,
-            `<div><strong>KPI</strong> ${{kpiText}}</div>`,
-            `<div><strong>Beds / 100k</strong> ${{bedsText}}</div>`,
-            `<div><strong>Market € / cap (12m avg)</strong> ${{marketText}}</div>`,
-            `<div><strong>Obesity % (latest)</strong> ${{obesityText}}</div>`,
+            `<div><strong>Score</strong> ${{kpiText}}</div>`,
+            `<div><strong>Camas / 100k</strong> ${{bedsText}}</div>`,
+            `<div><strong>Mercado € / hab (prom. 12m)</strong> ${{marketText}}</div>`,
+            `<div><strong>Obesidad % (ultimo)</strong> ${{obesityText}}</div>`,
             "</div>",
         ].join("");
 
@@ -760,16 +760,16 @@ html, body {{
     font-size: 0.8rem;
 }}
 .ranking-table col:nth-child(1) {{
-    width: 52.8%;
+    width: 48%;
 }}
 .ranking-table col:nth-child(2) {{
-    width: 14.8%;
+    width: 15%;
 }}
 .ranking-table col:nth-child(3) {{
-    width: 14.8%;
+    width: 18.5%;
 }}
 .ranking-table col:nth-child(4) {{
-    width: 17.6%;
+    width: 20%;
 }}
 .ranking-table th,
 .ranking-table td {{
@@ -875,23 +875,23 @@ html, body {{
             <div class="value">{ccaa_count}</div>
         </div>
         <div class="kpi-chip">
-            <div class="label">Hospitals</div>
+            <div class="label">Hospitales</div>
             <div class="value">{hospitals_total}</div>
         </div>
     </div>
 
     <div class="disease-panel">
-        <div class="disease-panel-label">Disease</div>
+        <div class="disease-panel-label">Indicador sanitario</div>
         <div class="disease-panel-value">{html_lib.escape(selected_disease)}</div>
         <div class="disease-panel-note">Dataset activo para el panel actual.</div>
     </div>
 
     <div class="map-legend-panel" role="note" aria-label="KPI legend">
-        <div class="map-legend-title">Legend: Opportunity KPI</div>
+        <div class="map-legend-title">Leyenda: score de oportunidad</div>
         <div class="map-legend-scale" aria-hidden="true"></div>
         <div class="map-legend-range">
-            <span>Low ({kpi_min:.2f})</span>
-            <span>High ({kpi_max:.2f})</span>
+            <span>Bajo ({kpi_min:.2f})</span>
+            <span>Alto ({kpi_max:.2f})</span>
         </div>
         <div class="map-legend-note">
             Azul más oscuro = mayor oportunidad estimada para la CCAA.
@@ -903,7 +903,7 @@ html, body {{
     </div>
 
     <aside class="ranking-panel">
-        <div class="ranking-title">Ranking Top Opportunities</div>
+        <div class="ranking-title">Ranking de oportunidades</div>
         <div class="ranking-scroll">
             <table class="ranking-table">
                 <colgroup>
@@ -915,9 +915,9 @@ html, body {{
                 <thead>
                     <tr>
                         <th>CCAA</th>
-                        <th>KPI</th>
-                        <th>Beds</th>
-                        <th>Market</th>
+                        <th>Score</th>
+                        <th>Camas</th>
+                        <th>Mercado</th>
                     </tr>
                 </thead>
                 <tbody>

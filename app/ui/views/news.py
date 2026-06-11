@@ -6,8 +6,8 @@ class NewsView:
         news_html = (
             '<div class="main-wrap">'
             '<div class="main-card">'
-            '<div class="main-kicker">PharmaTFG Platform</div>'
-            '<div class="main-title">News</div>'
+            '<div class="main-kicker">Plataforma PharmaTFG</div>'
+            '<div class="main-title">Noticias</div>'
             '<div class="main-text">Selección de fuentes clave para validar aprobaciones, alertas y seguir el pulso de la industria.</div>'
             '<div class="news-grid">'
             '<a class="news-card" href="https://www.aemps.gob.es/comunicacion/alertas/medicamentos-uso-humano/" target="_blank">'

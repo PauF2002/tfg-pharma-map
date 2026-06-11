@@ -182,17 +182,17 @@ class CcaaDetailView:
     const bindDiseaseTooltip = (layer, ccaaName) => {{
         if (!layer) return;
         const metric = metricsByCcaa[normalize(ccaaName)] || null;
-        const kpiText = metric && Number.isFinite(Number(metric.kpi)) ? Number(metric.kpi).toFixed(2) : "N/A";
-        const bedsText = metric && Number.isFinite(Number(metric.beds)) ? Number(metric.beds).toFixed(2) : "N/A";
-        const marketText = metric && Number.isFinite(Number(metric.market)) ? Number(metric.market).toFixed(2) : "N/A";
-        const obesityText = metric && Number.isFinite(Number(metric.obesity_pct)) ? Number(metric.obesity_pct).toFixed(1) : "N/A";
+        const kpiText = metric && Number.isFinite(Number(metric.kpi)) ? Number(metric.kpi).toFixed(2) : "N/D";
+        const bedsText = metric && Number.isFinite(Number(metric.beds)) ? Number(metric.beds).toFixed(2) : "N/D";
+        const marketText = metric && Number.isFinite(Number(metric.market)) ? Number(metric.market).toFixed(2) : "N/D";
+        const obesityText = metric && Number.isFinite(Number(metric.obesity_pct)) ? Number(metric.obesity_pct).toFixed(1) : "N/D";
         const html = [
             "<div style='min-width:220px'>",
             `<div style='font-weight:700;margin-bottom:6px'>${{ccaaName || "CCAA"}}</div>`,
-            `<div><strong>KPI</strong> ${{kpiText}}</div>`,
-            `<div><strong>Beds / 100k</strong> ${{bedsText}}</div>`,
-            `<div><strong>Market € / cap (12m avg)</strong> ${{marketText}}</div>`,
-            `<div><strong>Obesity % (latest)</strong> ${{obesityText}}</div>`,
+            `<div><strong>Score</strong> ${{kpiText}}</div>`,
+            `<div><strong>Camas / 100k</strong> ${{bedsText}}</div>`,
+            `<div><strong>Mercado € / hab (prom. 12m)</strong> ${{marketText}}</div>`,
+            `<div><strong>Obesidad % (ultimo)</strong> ${{obesityText}}</div>`,
             "</div>",
         ].join("");
 
@@ -487,16 +487,16 @@ class CcaaDetailView:
 
         preferred_default = "Comunidad Valenciana"
         disease_options = [
-            "Obesity",
+            "Obesidad",
             "Tabaquismo",
             "Alzheimer",
             "Epilepsia",
             "Diabetes",
             "Cardiovascular",
-            "Respiratory",
-            "Oncology",
+            "Respiratorio",
+            "Oncologia",
         ]
-        selected_disease = str(qp_disease or "Obesity") if str(qp_disease or "").strip() in disease_options else "Obesity"
+        selected_disease = str(qp_disease or "Obesidad") if str(qp_disease or "").strip() in disease_options else "Obesidad"
         disease_norm = self._norm_text(selected_disease)
         # Keep a single interactive base map for all diseases; swap only the data file
         map_html_path = project_root / "outputs" / "maps" / "ccaa_map_opportunity_score.html"
@@ -543,7 +543,7 @@ class CcaaDetailView:
         st.markdown(
             f"""
             <div class="ccaa-disease-switcher">
-                <div class="ccaa-disease-switcher-label">Disease</div>
+                <div class="ccaa-disease-switcher-label">Indicador sanitario</div>
                 <div class="ccaa-disease-switcher-row">
                     {disease_selector_html}
                 </div>
@@ -1781,7 +1781,7 @@ html, body {{
         </div>
 
         <div class="disease-panel ccaa-floating">
-            <div class="disease-panel-label">Disease</div>
+            <div class="disease-panel-label">Indicador sanitario</div>
             <div class="disease-panel-value">{html_lib.escape(selected_disease)}</div>
             <div class="disease-panel-note">Dataset activo para el detalle actual.</div>
         </div>
@@ -1789,7 +1789,7 @@ html, body {{
         <div class="ccaa-kpi-compare-strip ccaa-floating">
             <div class="ccaa-kpi-compare-title">
                 <span>Comparación</span>
-                <span class="ccaa-kpi-word {kpi_label_class}">KPI</span>
+                <span class="ccaa-kpi-word {kpi_label_class}">SCORE</span>
                 <span>Oportunidad</span>
             </div>
             <div class="ccaa-kpi-compare-grid">

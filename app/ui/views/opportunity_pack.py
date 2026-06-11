@@ -101,7 +101,7 @@ class OpportunityPackView:
             qp_snapshot = qp_snapshot[0]
 
         selected_ccaa = str(qp_ccaa or "Comunidad Valenciana")
-        selected_disease = str(qp_disease or "Obesity")
+        selected_disease = str(qp_disease or "Obesidad")
         snapshot_date = str(qp_snapshot or date.today().isoformat())
         hospital_ids = self._parse_values(qp_ids, separator=",")
         hospital_names = self._parse_values(qp_names, separator="||")
@@ -134,7 +134,7 @@ class OpportunityPackView:
         def _bucket_hospital_type(value: object) -> str:
             text = str(value or "").strip().lower()
             if "privad" in text:
-                return "Private"
+                return "Privado"
             if (
                 "public" in text
                 or "públic" in text
@@ -143,8 +143,8 @@ class OpportunityPackView:
                 or "autonomica" in text
                 or "autonómica" in text
             ):
-                return "Public"
-            return "Other"
+                return "Publico"
+            return "Otro"
 
         target_df = payload.target_hospitals.copy()
         if target_df.empty:
@@ -181,7 +181,7 @@ class OpportunityPackView:
             f"<td>{_fmt_int(row.get('beds', 0))}</td>"
             f"<td><span class='op-tier-badge {html_lib.escape(str(row.get('tier', 'tier 4')).lower().replace(' ', '-'))}'>{html_lib.escape(str(row.get('tier', 'Tier 4')))}</span></td>"
             f"<td><strong>{float(row.get('score', 0.0)):.1f}</strong></td>"
-            f"<td>{'Priority visit' if str(row.get('tier', '')).strip() == 'Tier 1' else 'Extend outreach'}</td>"
+            f"<td>{'Visita prioritaria' if str(row.get('tier', '')).strip() == 'Tier 1' else 'Ampliar alcance'}</td>"
             "</tr>"
             for row in hospital_rows
         )
@@ -204,12 +204,13 @@ class OpportunityPackView:
             .fillna("")
             .map(_bucket_hospital_type)
             .value_counts()
-            .reindex(["Public", "Private", "Other"], fill_value=0)
+            .reindex(["Publico", "Privado", "Otro"], fill_value=0)
         )
         type_max = max(int(type_counts.max()), 1)
+        label_display_map = {"Publico": "Público", "Privado": "Privado", "Otro": "Otro"}
         type_bars_html = "".join(
             "<div class='op-mini-bar-row'>"
-            f"<div class='op-mini-label op-mini-label-{html_lib.escape(label.lower())}'>{html_lib.escape(label)}</div>"
+            f"<div class='op-mini-label op-mini-label-{html_lib.escape(label.lower())}'>{html_lib.escape(label_display_map.get(label, label))}</div>"
             "<div class='op-mini-track'>"
             f"<div class='op-mini-fill op-mini-fill-{html_lib.escape(label.lower())}' style='width:{(int(count) / type_max) * 100:.1f}%;'></div>"
             "</div>"
@@ -548,18 +549,18 @@ class OpportunityPackView:
                     <div class="op-header-title">Target Opportunity Pack</div>
                     <div class="op-header-meta">
                         <img class="op-flag" src="{html_lib.escape(selected_flag_url, quote=True)}" alt="CCAA flag" />
-                        <span>{html_lib.escape(selected_ccaa)} | Disease: {html_lib.escape(selected_disease)} | {html_lib.escape(snapshot_date)}</span>
+                        <span>{html_lib.escape(selected_ccaa)} | Indicador sanitario: {html_lib.escape(selected_disease)} | {html_lib.escape(snapshot_date)}</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
             with header_right:
                 st.markdown(
-                    f"<div class='op-export-meta'>{target_hospitals} selected hospitals</div>",
+                    f"<div class='op-export-meta'>{target_hospitals} hospitales seleccionados</div>",
                     unsafe_allow_html=True,
                 )
                 st.download_button(
-                    "Export Opportunity Pack",
+                    "Exportar pack de oportunidad",
                     data=excel_bytes,
                     file_name=f"target_list_{selected_ccaa.lower().replace(' ', '_')}_{snapshot_date}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -569,15 +570,15 @@ class OpportunityPackView:
 
         avg_tip = (
             "Media de Score en hospitales seleccionados. "
-            "Score = Opp Score CCAA x Factor Tamano x Factor Tipo Centro, con tope 0-100."
+            "Score = Opp Score CCAA x Factor Tamaño x Factor Tipo Centro, con tope 0-100."
         )
         max_tip = (
-            "Maximo Score observado en el target. "
-            "Usa la misma formula por hospital con clipping 0-100."
+            "Máximo Score observado en el target. "
+            "Usa la misma fórmula por hospital con clipping 0-100."
         )
         market_tip = (
             "Suma de market_potential_eur. "
-            "Por hospital: Beds x Market 12m EUR/capita CCAA x multiplicador por Tier "
+            "Por hospital: Camas x Mercado 12m EUR/capita CCAA x multiplicador por Tier "
             "(Tier 1=1.30, Tier 2=1.15, Tier 3=1.00, Tier 4=0.85)."
         )
 
@@ -843,44 +844,44 @@ body {{
 <div class="op-shell">
     <div class="op-grid-kpi">
         <div class="op-card">
-            <div class="op-kpi-title"><span class="op-kpi-icon">🏥</span>Target hospitals</div>
+            <div class="op-kpi-title"><span class="op-kpi-icon">🏥</span>Hospitales objetivo</div>
             <div class="op-kpi-value">{target_hospitals}</div>
             <div class="op-kpi-sub placeholder">alignment</div>
         </div>
         <div class="op-card">
-            <div class="op-kpi-title"><span class="op-kpi-icon">🛏</span>Total beds</div>
+            <div class="op-kpi-title"><span class="op-kpi-icon">🛏</span>Camas totales</div>
             <div class="op-kpi-value">{_fmt_int(total_beds)}</div>
             <div class="op-kpi-sub placeholder">alignment</div>
         </div>
         <div class="op-card">
-            <div class="op-kpi-title"><span class="op-kpi-icon">◎</span>Avg score <span class="op-info" data-tip="{html_lib.escape(avg_tip, quote=True)}">i</span></div>
+            <div class="op-kpi-title"><span class="op-kpi-icon">◎</span>Score promedio <span class="op-info" data-tip="{html_lib.escape(avg_tip, quote=True)}">i</span></div>
             <div class="op-kpi-value">{_fmt_score(avg_score)}</div>
-            <div class="op-kpi-sub">{avg_vs_max:.0f}% of max score</div>
+            <div class="op-kpi-sub">{avg_vs_max:.0f}% del score máximo</div>
         </div>
         <div class="op-card">
-            <div class="op-kpi-title"><span class="op-kpi-icon gold">🏆</span>Max score <span class="op-info" data-tip="{html_lib.escape(max_tip, quote=True)}">i</span></div>
+            <div class="op-kpi-title"><span class="op-kpi-icon gold">🏆</span>Score máximo <span class="op-info" data-tip="{html_lib.escape(max_tip, quote=True)}">i</span></div>
             <div class="op-kpi-value">{_fmt_score(max_score)}</div>
-            <div class="op-kpi-sub">Top hospital {html_lib.escape(top_hospital_name)}</div>
+            <div class="op-kpi-sub">Hospital top {html_lib.escape(top_hospital_name)}</div>
         </div>
         <div class="op-card">
-            <div class="op-kpi-title"><span class="op-kpi-icon">📈</span>Market potential <span class="op-info" data-tip="{html_lib.escape(market_tip, quote=True)}">i</span></div>
+            <div class="op-kpi-title"><span class="op-kpi-icon">📈</span>Potencial de mercado <span class="op-info" data-tip="{html_lib.escape(market_tip, quote=True)}">i</span></div>
             <div class="op-kpi-value">{_fmt_market_short(market_potential)}</div>
-            <div class="op-kpi-pill">Tier 1 ready</div>
+            <div class="op-kpi-pill">Listo para Tier 1</div>
         </div>
     </div>
 
     <div class="op-main-grid">
         <div class="op-card">
-            <div class="op-card-title">Therapeutic Opportunity</div>
-            <div class="op-rationale"><strong>Commercial rationale:</strong> {html_lib.escape(payload.therapeutic_description)}</div>
+            <div class="op-card-title">Oportunidad terapéutica</div>
+            <div class="op-rationale"><strong>Razón comercial:</strong> {html_lib.escape(payload.therapeutic_description)}</div>
             <div class="op-table-scroll therapeutic">
                 <table class="op-table">
                     <thead>
                         <tr>
-                            <th>Molecule</th>
-                            <th>Therapy line</th>
-                            <th>Drug class</th>
-                            <th>Strategic rationale</th>
+                            <th>Molécula</th>
+                            <th>Línea terapéutica</th>
+                            <th>Clase farmacológica</th>
+                            <th>Razón estratégica</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -891,17 +892,17 @@ body {{
         </div>
 
         <div class="op-card">
-            <div class="op-card-title">Hospital Target List</div>
+            <div class="op-card-title">Lista objetivo de hospitales</div>
             <div class="op-table-scroll hospital">
                 <table class="op-table">
                     <thead>
                         <tr>
-                            <th style="width:8%;">Rank</th>
+                            <th style="width:8%;">Rango</th>
                             <th style="width:29%;">Hospital</th>
-                            <th style="width:16%;">City</th>
-                            <th style="width:10%;">Beds</th>
-                            <th style="width:12%;">Priority</th>
-                            <th style="width:10%;">Opport.</th>
+                            <th style="width:16%;">Ciudad</th>
+                            <th style="width:10%;">Camas</th>
+                            <th style="width:12%;">Prioridad</th>
+                            <th style="width:10%;">Oport.</th>
                             <th style="width:15%;">Score</th>
                         </tr>
                     </thead>
@@ -915,15 +916,15 @@ body {{
 
     <div class="op-bottom-grid">
         <div class="op-card">
-            <div class="op-card-title">Top Hospitals by Opportunity Score</div>
+            <div class="op-card-title">Top hospitales por score de oportunidad</div>
             {top_score_bars_html}
         </div>
         <div class="op-card">
-            <div class="op-card-title">Hospital Insights</div>
+            <div class="op-card-title">Insights hospitalarios</div>
             {type_bars_html}
         </div>
         <div class="op-card">
-            <div class="op-card-title">Province split</div>
+            <div class="op-card-title">Distribución por provincia</div>
             {province_bars_html}
         </div>
     </div>

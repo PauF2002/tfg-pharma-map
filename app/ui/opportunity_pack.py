@@ -640,7 +640,7 @@ def _center_type_factor(dependency: object, center_class: object) -> float:
         base = 0.92
     elif "servicios e institutos de salud" in dep:
         base = 1.10
-    elif "otros centros o establecimientos publicos" in dep:
+    elif "otros centros o establecimientos públicos" in dep:
         base = 1.03
     else:
         base = 1.00
@@ -661,7 +661,7 @@ def _center_type_factor(dependency: object, center_class: object) -> float:
 
 def generate_executive_summary(context: dict[str, str | int], kpis: dict[str, float | int]) -> str:
     ccaa = context.get("ccaa", "CCAA no definida")
-    disease = context.get("disease", "Disease no definida")
+    disease = context.get("disease", "Indicador no definido")
     hospitals = int(kpis.get("target_hospitals", 0) or 0)
     beds = int(kpis.get("total_beds", 0) or 0)
     avg_score = float(kpis.get("avg_score", 0) or 0)
@@ -738,11 +738,11 @@ def _build_therapeutic_block(disease: str) -> tuple[str, pd.DataFrame]:
     description, rows = definitions.get(
         disease_key,
         (
-            "No hay mapeo terapéutico específico para esta disease. Se muestran placeholders para preparar discusión ejecutiva.",
+            "No hay mapeo terapéutico específico para este indicador. Se muestran ejemplos para preparar la discusión ejecutiva.",
             [
-                {"molecule": "Molecule A", "therapy_line": "1L", "potential_medication": "Therapy Class A", "commercial_note": "Placeholder"},
-                {"molecule": "Molecule B", "therapy_line": "2L", "potential_medication": "Therapy Class B", "commercial_note": "Placeholder"},
-                {"molecule": "Molecule C", "therapy_line": "3L", "potential_medication": "Therapy Class C", "commercial_note": "Placeholder"},
+                {"molecule": "Molécula A", "therapy_line": "1L", "potential_medication": "Clase terapéutica A", "commercial_note": "Ejemplo"},
+                {"molecule": "Molécula B", "therapy_line": "2L", "potential_medication": "Clase terapéutica B", "commercial_note": "Ejemplo"},
+                {"molecule": "Molécula C", "therapy_line": "3L", "potential_medication": "Clase terapéutica C", "commercial_note": "Ejemplo"},
             ],
         ),
     )
@@ -939,7 +939,7 @@ def prepare_opportunity_pack_data(
 
     context = {
         "ccaa": ccaa or "N/A",
-        "disease": disease or "Obesity",
+        "disease": disease or "Obesidad",
         "snapshot_date": snapshot_date or str(date.today()),
         "n_hospitals": int(kpis["target_hospitals"]),
     }
@@ -1159,14 +1159,14 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         cover.merge_range("B2:F2", "Target Opportunity Pack", fmt_cover_title)
         cover.merge_range(
             "B3:F3",
-            "Investor Snapshot: impacto comercial y foco de ejecución en una sola vista.",
+            "Resumen ejecutivo: impacto comercial y foco de ejecución en una sola vista.",
             fmt_cover_subtitle,
         )
 
         context_line = (
             f"CCAA: {payload.context.get('ccaa', 'N/A')} | "
-            f"Disease: {payload.context.get('disease', 'N/A')} | "
-            f"Snapshot date: {payload.context.get('snapshot_date', 'N/A')}"
+            f"Indicador sanitario: {payload.context.get('disease', 'N/A')} | "
+            f"Fecha de corte: {payload.context.get('snapshot_date', 'N/A')}"
         )
         cover.merge_range("B5:F5", context_line, fmt_context)
 
@@ -1176,8 +1176,8 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         ccaa_flag_url = _resolve_ccaa_flag_url(selected_ccaa)
         disease_image_path = _resolve_disease_image_path(project_root, selected_disease)
 
-        cover.merge_range("G2:H2", "CCAA flag", fmt_section)
-        cover.write("I2", "Disease", fmt_section)
+        cover.merge_range("G2:H2", "Bandera CCAA", fmt_section)
+        cover.write("I2", "Indicador sanitario", fmt_section)
 
         flag_x_scale = 0.13
         flag_y_scale = 0.13
@@ -1214,7 +1214,7 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
                 keep_aspect=False,
             )
         if not inserted_flag:
-            cover.merge_range("G3:H4", f"Flag: {selected_ccaa}", fmt_cover_highlight)
+            cover.merge_range("G3:H4", f"Bandera: {selected_ccaa}", fmt_cover_highlight)
 
         inserted_disease = False
         if disease_image_path is not None:
@@ -1230,10 +1230,10 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         if not inserted_disease:
             cover.merge_range("I3:I4", f"{selected_disease}", fmt_cover_highlight)
 
-        cover.merge_range("B7:C7", "Target hospitals", fmt_cover_kpi_label)
-        cover.merge_range("D7:E7", "Total beds", fmt_cover_kpi_label)
-        cover.merge_range("F7:G7", "Average score", fmt_cover_kpi_label)
-        cover.merge_range("H7:I7", "Market potential (EUR)", fmt_cover_kpi_label)
+        cover.merge_range("B7:C7", "Hospitales objetivo", fmt_cover_kpi_label)
+        cover.merge_range("D7:E7", "Camas totales", fmt_cover_kpi_label)
+        cover.merge_range("F7:G7", "Puntuación promedio", fmt_cover_kpi_label)
+        cover.merge_range("H7:I7", "Potencial de mercado (EUR)", fmt_cover_kpi_label)
 
         cover.merge_range("B8:C9", int(payload.kpis.get("target_hospitals", 0)), fmt_cover_kpi_value)
         cover.merge_range("D8:E9", int(payload.kpis.get("total_beds", 0)), fmt_cover_kpi_value)
@@ -1246,9 +1246,9 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
                 payload.target_hospitals.sort_values("score", ascending=False).iloc[0].get("hospital", "N/A")
             )
 
-        cover.merge_range("B11:E11", "Top account recommendation", fmt_section)
-        cover.merge_range("B12:E13", f"Prioritize executive engagement with {top_hospital}.", fmt_cover_highlight)
-        cover.merge_range("F11:I11", "Investment narrative", fmt_section)
+        cover.merge_range("B11:E11", "Recomendación principal", fmt_section)
+        cover.merge_range("B12:E13", f"Priorizar contacto ejecutivo con {top_hospital}.", fmt_cover_highlight)
+        cover.merge_range("F11:I11", "Narrativa de inversión", fmt_section)
         cover.merge_range("F12:I13", payload.executive_summary, fmt_cover_story)
 
         market_trend_df = _load_market_trend_for_ccaa(project_root, selected_ccaa, max_points=24)
@@ -1266,10 +1266,10 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
 
         pharma_mean = float(pd.to_numeric(pharma_spend_df.get("value"), errors="coerce").mean()) if not pharma_spend_df.empty else 0.0
 
-        cover.write("BW2", "Period")
-        cover.write("BX2", "Pharma spend EUR")
-        cover.write("BY2", "3M moving avg")
-        cover.write("BZ2", "Mean EUR")
+        cover.write("BW2", "Periodo")
+        cover.write("BX2", "Gasto farmacéutico EUR")
+        cover.write("BY2", "Media móvil 3M")
+        cover.write("BZ2", "Media EUR")
         for row_idx, row in enumerate(pharma_spend_df.itertuples(index=False), start=3):
             cover.write(f"BW{row_idx}", str(getattr(row, "period", "")))
             cover.write_number(f"BX{row_idx}", float(getattr(row, "value", 0.0)))
@@ -1281,7 +1281,7 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
             chart_pharma_spend = workbook.add_chart({"type": "column"})
             chart_pharma_spend.add_series(
                 {
-                    "name": "Pharma spend EUR",
+                    "name": "Gasto farmacéutico EUR",
                     "categories": f"='Cover'!$BW$3:$BW${pharma_end}",
                     "values": f"='Cover'!$BX$3:$BX${pharma_end}",
                     "fill": {"color": "#0ea5e9"},
@@ -1302,15 +1302,15 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
             )
             chart_pharma_spend.combine(chart_pharma_mean)
 
-            chart_pharma_spend.set_title({"name": f"Gasto farmaceutico ({selected_ccaa})"})
+            chart_pharma_spend.set_title({"name": f"Gasto farmacéutico ({selected_ccaa})"})
             chart_pharma_spend.set_y_axis({"name": "EUR", "major_gridlines": {"visible": False}})
-            chart_pharma_spend.set_x_axis({"name": "Year-Month", "num_font": {"rotation": -45, "size": 8}})
+            chart_pharma_spend.set_x_axis({"name": "Año-Mes", "num_font": {"rotation": -45, "size": 8}})
             chart_pharma_spend.set_legend({"position": "bottom"})
             chart_pharma_spend.set_chartarea({"border": {"none": True}})
             chart_pharma_spend.set_plotarea({"border": {"none": True}})
             cover.insert_chart("B15", chart_pharma_spend, {"x_scale": 2.94, "y_scale": 1.05})
         else:
-            cover.merge_range("B15:I18", "No hay datos de gasto farmaceutico para la CCAA seleccionada.", fmt_cover_highlight)
+            cover.merge_range("B15:I18", "No hay datos de gasto farmacéutico para la CCAA seleccionada.", fmt_cover_highlight)
 
         summary = workbook.add_worksheet("Executive Summary")
         summary.hide_gridlines(2)
@@ -1329,25 +1329,25 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         summary.merge_range("B2:I3", "Executive Dashboard - Opportunity Pack", fmt_header_bar)
         context_text = (
             f"CCAA: {payload.context.get('ccaa', 'N/A')} | "
-            f"Disease: {payload.context.get('disease', 'N/A')} | "
-            f"Snapshot: {payload.context.get('snapshot_date', 'N/A')}"
+            f"Indicador sanitario: {payload.context.get('disease', 'N/A')} | "
+            f"Fecha de corte: {payload.context.get('snapshot_date', 'N/A')}"
         )
         summary.merge_range("B4:I4", context_text, fmt_context)
 
         # KPI cards
-        summary.merge_range("B6:C6", "Target hospitals", fmt_card_label)
-        summary.merge_range("D6:E6", "Total beds", fmt_card_label)
-        summary.merge_range("F6:G6", "Average score", fmt_card_label)
-        summary.merge_range("H6:I6", "Market potential (EUR)", fmt_card_label)
+        summary.merge_range("B6:C6", "Hospitales objetivo", fmt_card_label)
+        summary.merge_range("D6:E6", "Camas totales", fmt_card_label)
+        summary.merge_range("F6:G6", "Puntuación promedio", fmt_card_label)
+        summary.merge_range("H6:I6", "Potencial de mercado (EUR)", fmt_card_label)
 
         summary.merge_range("B7:C8", int(payload.kpis.get("target_hospitals", 0)), fmt_card_value)
         summary.merge_range("D7:E8", int(payload.kpis.get("total_beds", 0)), fmt_card_value)
         summary.merge_range("F7:G8", round(float(payload.kpis.get("avg_score", 0)), 1), fmt_card_value)
         summary.merge_range("H7:I8", float(payload.kpis.get("market_potential", 0)), fmt_card_value_currency)
 
-        summary.merge_range("B10:C10", "Tier 1 hospitals", fmt_card_label)
-        summary.merge_range("D10:E10", "Max score", fmt_card_label)
-        summary.merge_range("F10:I10", "Executive summary", fmt_section)
+        summary.merge_range("B10:C10", "Hospitales Tier 1", fmt_card_label)
+        summary.merge_range("D10:E10", "Puntuación máxima", fmt_card_label)
+        summary.merge_range("F10:I10", "Resumen ejecutivo", fmt_section)
 
         summary.merge_range("B11:C12", int(payload.kpis.get("tier_1_hospitals", 0)), fmt_card_value)
         summary.merge_range("D11:E12", round(float(payload.kpis.get("max_score", 0)), 1), fmt_card_value)
@@ -1360,7 +1360,7 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         def _bucket_hospital_type(value: str) -> str:
             lower = value.lower()
             if "privad" in lower:
-                return "Private"
+                return "Privado"
             if (
                 "public" in lower
                 or "públic" in lower
@@ -1369,22 +1369,22 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
                 or "autonomica" in lower
                 or "autonómica" in lower
             ):
-                return "Public"
-            return "Other"
+                return "Público"
+            return "Otro"
 
         type_split = (
-            target_df["dependency"].map(_bucket_hospital_type).value_counts().reindex(["Public", "Private", "Other"], fill_value=0)
+            target_df["dependency"].map(_bucket_hospital_type).value_counts().reindex(["Público", "Privado", "Otro"], fill_value=0)
         )
 
-        summary.write("U2", "Type")
-        summary.write("V2", "Hospitals")
+        summary.write("U2", "Tipo")
+        summary.write("V2", "Hospitales")
         for row_idx, (label, value) in enumerate(type_split.items(), start=3):
             summary.write(f"U{row_idx}", label)
             summary.write_number(f"V{row_idx}", int(value))
 
         top_chart_df = payload.top_score_chart.copy().head(8)
         summary.write("U8", "Hospital")
-        summary.write("V8", "Score")
+        summary.write("V8", "Puntuación")
         for row_idx, row in enumerate(top_chart_df.itertuples(index=False), start=9):
             summary.write(f"U{row_idx}", str(getattr(row, "hospital", "")))
             summary.write_number(f"V{row_idx}", float(getattr(row, "score", 0.0)))
@@ -1393,7 +1393,7 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         if tier_df.empty:
             tier_df = pd.DataFrame({"tier": ["Tier 1", "Tier 2", "Tier 3", "Tier 4"], "hospitals": [0, 0, 0, 0]})
         summary.write("W2", "Tier")
-        summary.write("X2", "Hospitals")
+        summary.write("X2", "Hospitales")
         for row_idx, row in enumerate(tier_df.itertuples(index=False), start=3):
             summary.write(f"W{row_idx}", str(getattr(row, "tier", "")))
             summary.write_number(f"X{row_idx}", int(getattr(row, "hospitals", 0)))
@@ -1402,7 +1402,7 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         chart_split = workbook.add_chart({"type": "doughnut"})
         chart_split.add_series(
             {
-                "name": "Hospital type split",
+                "name": "Distribución por tipo de hospital",
                 "categories": "='Executive Summary'!$U$3:$U$5",
                 "values": "='Executive Summary'!$V$3:$V$5",
                 "data_labels": {"percentage": True, "leader_lines": True},
@@ -1413,7 +1413,7 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
                 ],
             }
         )
-        chart_split.set_title({"name": "Public vs Private hospitals"})
+        chart_split.set_title({"name": "Hospitales públicos vs privados"})
         chart_split.set_legend({"position": "bottom"})
         chart_split.set_chartarea({"border": {"none": True}})
         summary.insert_chart("B14", chart_split, {"x_scale": 1.05, "y_scale": 1.1})
@@ -1423,7 +1423,7 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         chart_top = workbook.add_chart({"type": "column"})
         chart_top.add_series(
             {
-                "name": "Opportunity score",
+                "name": "Puntuación de oportunidad",
                 "categories": f"='Executive Summary'!$U$9:$U${top_end}",
                 "values": f"='Executive Summary'!$V$9:$V${top_end}",
                 "fill": {"color": "#5ea388"},
@@ -1431,8 +1431,8 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
                 "data_labels": {"value": True},
             }
         )
-        chart_top.set_title({"name": "Top hospitals by opportunity score"})
-        chart_top.set_y_axis({"name": "Score", "max": 100, "major_gridlines": {"visible": False}})
+        chart_top.set_title({"name": "Top hospitales por puntuación de oportunidad"})
+        chart_top.set_y_axis({"name": "Puntuación", "max": 100, "major_gridlines": {"visible": False}})
         chart_top.set_x_axis({"label_position": "low"})
         chart_top.set_legend({"none": True})
         chart_top.set_chartarea({"border": {"none": True}})
@@ -1444,7 +1444,7 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         chart_tier = workbook.add_chart({"type": "bar"})
         chart_tier.add_series(
             {
-                "name": "Hospitals",
+                "name": "Hospitales",
                 "categories": f"='Executive Summary'!$W$3:$W${tier_end}",
                 "values": f"='Executive Summary'!$X$3:$X${tier_end}",
                 "fill": {"color": "#4f8b9f"},
@@ -1452,8 +1452,8 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
                 "data_labels": {"value": True},
             }
         )
-        chart_tier.set_title({"name": "Hospital priority tier distribution"})
-        chart_tier.set_x_axis({"name": "Hospitals", "major_gridlines": {"visible": False}})
+        chart_tier.set_title({"name": "Distribución de prioridad por tier"})
+        chart_tier.set_x_axis({"name": "Hospitales", "major_gridlines": {"visible": False}})
         chart_tier.set_legend({"none": True})
         chart_tier.set_chartarea({"border": {"none": True}})
         chart_tier.set_plotarea({"border": {"none": True}})
@@ -1470,9 +1470,33 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         therapeutic_sheet = writer.sheets["Therapeutic Opportunity"]
         therapeutic_sheet.write("A1", "Therapeutic Opportunity", fmt_title)
         therapeutic_sheet.write("A2", payload.therapeutic_description)
+        therapeutic_sheet.write("A3", "Molécula")
+        therapeutic_sheet.write("B3", "Línea terapéutica")
+        therapeutic_sheet.write("C3", "Clase farmacológica")
+        therapeutic_sheet.write("D3", "Razón estratégica")
         therapeutic_sheet.set_column("A:D", 30)
 
-        payload.target_hospitals.to_excel(writer, sheet_name="Hospital Target List", index=False)
+        target_hospitals_es = payload.target_hospitals.rename(
+            columns={
+                "ranking": "rango",
+                "hospital_id": "id_hospital",
+                "hospital": "hospital",
+                "ccaa": "ccaa",
+                "municipio": "municipio",
+                "provincia": "provincia",
+                "beds": "camas",
+                "score": "puntuacion",
+                "tier": "tier",
+                "inclusion_reason": "motivo_inclusion",
+                "recommended_action": "accion_recomendada",
+                "dependency": "dependencia",
+                "center_class": "clase_centro",
+                "size_factor": "factor_tamano",
+                "center_type_factor": "factor_tipo_centro",
+                "market_potential_eur": "potencial_mercado_eur",
+            }
+        )
+        target_hospitals_es.to_excel(writer, sheet_name="Hospital Target List", index=False)
         target_sheet = writer.sheets["Hospital Target List"]
         target_sheet.set_column("A:A", 10)
         target_sheet.set_column("B:B", 16)
@@ -1484,7 +1508,28 @@ def build_opportunity_pack_excel(payload: OpportunityPackPayload) -> bytes:
         target_sheet.set_column("L:M", 20)
         target_sheet.set_column("N:N", 18)
 
-        payload.raw_data.to_excel(writer, sheet_name="Raw Data", index=False)
+        raw_data_es = payload.raw_data.rename(
+            columns={
+                "hospital_id": "id_hospital",
+                "hospital": "hospital",
+                "ccaa": "ccaa",
+                "ccaa_norm": "ccaa_norm",
+                "municipio": "municipio",
+                "provincia": "provincia",
+                "beds": "camas",
+                "score": "puntuacion",
+                "tier": "tier",
+                "inclusion_reason": "motivo_inclusion",
+                "recommended_action": "accion_recomendada",
+                "dependency": "dependencia",
+                "center_class": "clase_centro",
+                "market_potential_eur": "potencial_mercado_eur",
+                "size_factor": "factor_tamano",
+                "center_type_factor": "factor_tipo_centro",
+                "ranking": "rango",
+            }
+        )
+        raw_data_es.to_excel(writer, sheet_name="Raw Data", index=False)
         raw_sheet = writer.sheets["Raw Data"]
         raw_sheet.set_column("A:Z", 18)
 
