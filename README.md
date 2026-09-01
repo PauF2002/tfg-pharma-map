@@ -1,5 +1,6 @@
 Pharma Decision Platform - TFG
 
+
 Data analytics platform for decision support in the pharmaceutical sector.
 
 This project was developed as a Final Degree Project in Computer Engineering. Its main goal is to design and implement an interactive data analysis platform capable of integrating hospital, demographic, healthcare, market and geographic data to support decision-making in the pharmaceutical sector.
@@ -9,6 +10,10 @@ The platform transforms heterogeneous public datasets into interactive maps, ran
 ⸻
 
 Project Overview
+
+<img width="567" height="259" alt="image" src="https://github.com/user-attachments/assets/e287f356-afb9-4bb1-b205-0f3f79d8c580" />
+
+
 
 The pharmaceutical sector works with multiple sources of information, such as hospitals, population, health indicators, market data and territorial data. However, these sources are often dispersed, use different formats and are not directly prepared for analysis.
 
@@ -31,6 +36,11 @@ Main Features
 
 Interactive Opportunity Map
 
+<img width="514" height="230" alt="image" src="https://github.com/user-attachments/assets/797fb231-d3ff-43a1-8213-8b3f2e0a09bf" />
+
+
+
+
 The platform includes an interactive map where each autonomous community is colored according to its opportunity score. The score combines market data, health indicators and hospital capacity.
 
 Multi-indicator Analysis
@@ -38,6 +48,11 @@ Multi-indicator Analysis
 The user can switch between different health indicators. When the selected indicator changes, the platform updates the map, legend and ranking dynamically.
 
 Regional Detail View
+
+<img width="514" height="236" alt="image" src="https://github.com/user-attachments/assets/4dd0c6b2-48da-48ca-92e5-7e0430b7e844" />
+
+
+
 
 After selecting an autonomous community, the platform shows a detailed view with regional KPIs, market evolution, hospitals and comparison with the national average.
 
@@ -47,9 +62,30 @@ The hospital table allows users to search, filter and sort hospitals by differen
 
 Opportunity Pack
 
+<img width="505" height="228" alt="image" src="https://github.com/user-attachments/assets/c4144558-2fe4-4528-b26c-fbe224c85828" />
+
+
+
+
+
 Selected hospitals are grouped into an Opportunity Pack. This module summarizes the selected hospitals, calculates average and maximum scores, estimates market potential and classifies hospitals by priority tiers.
 
 Excel Export
+
+
+<img width="581" height="285" alt="image" src="https://github.com/user-attachments/assets/85990ade-6ce6-43dd-b6e1-4f56a2abe07d" />
+
+
+
+
+
+
+
+
+<img width="586" height="241" alt="image" src="https://github.com/user-attachments/assets/9dc9bca0-63dd-4287-8058-d4db89ce7a84" />
+
+
+
 
 The platform can export the analysis into an executive Excel report, including a cover page, executive summary, therapeutic opportunity, hospital target list and raw data.
 
